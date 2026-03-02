@@ -33,9 +33,9 @@ interface Contact {
   phone: string;
   email: string;
   company: string;
-  brand: Brand;
+  brand: string;
   tags: string[];
-  stage: Stage;
+  stage: string;
   score: number;
   lastContact: string;
   notes: string;
@@ -274,7 +274,7 @@ export default function ContactsPage() {
   };
 
   const handleAddContact = (data: ContactFormData) => {
-    const newContact = {
+    const newContact: Contact = {
       id: String(Date.now()),
       ...data,
       email: data.email || "",
