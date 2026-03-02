@@ -56,13 +56,13 @@ In Vercel project settings → Environment Variables, add:
 
 | Variable | Value | Notes |
 |---|---|---|
-| `LLM_ENDPOINT` | `https://ollama.datamug.com/v1` | Your Cloudflare Tunnel URL |
+| `LLM_ENDPOINT` | `https://ollama.mugdata.com/v1` | Your Cloudflare Tunnel URL |
 | `OPENAI_API_KEY` | `ollama` | Dummy key (Ollama doesn't validate) |
 | `DEFAULT_MODEL` | `llava:7b` | Default model for new users |
 
 ### 3. Custom Domain
 
-Add `data-mug.com` (or your domain) in Vercel project settings → Domains.
+Add `mugdata.com` (or your domain) in Vercel project settings → Domains.
 
 ### 4. Deploy
 
@@ -104,8 +104,8 @@ cloudflared tunnel login
 # 2. Create a named tunnel
 cloudflared tunnel create ollama-tunnel
 
-# 3. Configure DNS (creates ollama.datamug.com)
-cloudflared tunnel route dns ollama-tunnel ollama.datamug.com
+# 3. Configure DNS (creates ollama.mugdata.com)
+cloudflared tunnel route dns ollama-tunnel ollama.mugdata.com
 
 # 4. Create config file (~/.cloudflared/config.yml)
 cat > ~/.cloudflared/config.yml << 'EOF'
@@ -113,7 +113,7 @@ tunnel: ollama-tunnel
 credentials-file: ~/.cloudflared/<TUNNEL_ID>.json
 
 ingress:
-  - hostname: ollama.datamug.com
+  - hostname: ollama.mugdata.com
     service: http://localhost:11434
     originRequest:
       noTLSVerify: true
@@ -139,7 +139,7 @@ launchctl start com.cloudflare.cloudflared
 
 ```bash
 # Test from any machine
-curl https://ollama.datamug.com/api/tags
+curl https://ollama.mugdata.com/api/tags
 # Should return list of Ollama models
 ```
 
@@ -148,7 +148,7 @@ curl https://ollama.datamug.com/api/tags
 To restrict access to your tunnel, use [Cloudflare Access](https://developers.cloudflare.com/cloudflare-one/):
 
 1. Go to Cloudflare Zero Trust dashboard
-2. Create an Access Application for `ollama.datamug.com`
+2. Create an Access Application for `ollama.mugdata.com`
 3. Set a service token policy
 4. Add the service token to Vercel as `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET`
 
@@ -157,7 +157,7 @@ To restrict access to your tunnel, use [Cloudflare Access](https://developers.cl
 DataMug provides a health endpoint:
 
 ```bash
-curl https://data-mug.com/api/health
+curl https://mugdata.com/api/health
 ```
 
 Returns:
@@ -169,7 +169,7 @@ Returns:
   "timestamp": "2026-03-02T18:00:00Z",
   "ollama": {
     "status": "connected",
-    "endpoint": "https://ollama.datamug.com/v1",
+    "endpoint": "https://ollama.mugdata.com/v1",
     "models": 3
   }
 }

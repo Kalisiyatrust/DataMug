@@ -15,12 +15,12 @@ export const metadata: Metadata = {
     "local AI",
     "vision model",
   ],
-  metadataBase: new URL("https://data-mug.com"),
+  metadataBase: new URL("https://mugdata.com"),
   openGraph: {
     title: "DataMug — AI Vision Analysis",
     description:
       "Upload images and get AI-powered analysis using local vision models. Private, fast, free.",
-    url: "https://data-mug.com",
+    url: "https://mugdata.com",
     siteName: "DataMug",
     type: "website",
   },

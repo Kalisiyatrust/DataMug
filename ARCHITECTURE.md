@@ -39,7 +39,7 @@ DataMug is a computer vision application that lets users upload images and get A
                        ▼
 ┌─────────────────────────────────────────────────────────┐
 │           CLOUDFLARE TUNNEL (Encrypted)                  │
-│  ollama.datamug.com → localhost:11434                    │
+│  ollama.mugdata.com → localhost:11434                    │
 │  • Zero-trust access (optional Cloudflare Access)       │
 │  • Free tier, stable subdomain                          │
 │  • HTTPS termination handled by Cloudflare              │
@@ -102,7 +102,7 @@ DataMug is a computer vision application that lets users upload images and get A
 
 | Variable        | Dev Value                        | Prod Value (Vercel)                    |
 |-----------------|----------------------------------|----------------------------------------|
-| LLM_ENDPOINT    | http://localhost:11434/v1        | https://ollama.datamug.com/v1          |
+| LLM_ENDPOINT    | http://localhost:11434/v1        | https://ollama.mugdata.com/v1          |
 | OPENAI_API_KEY  | ollama                           | ollama (dummy, not checked)            |
 | MODEL           | llava:7b                         | llava:7b (or user-selectable)          |
 | NEXT_PUBLIC_APP | DataMug                          | DataMug                               |
@@ -131,7 +131,7 @@ DataMug is a computer vision application that lets users upload images and get A
 | **Day 9** | Multi-image support, image comparison analysis | Side-by-side analysis | ✅ Milestone 4: Multi-image Support |
 | **Day 10** | Export/share results (copy, download as PDF/text) | Export functionality | |
 | **Day 11** | Performance optimization (image compression, lazy loading) | Fast load times | |
-| **Day 12** | Landing page for datamug.com, SEO meta tags | Public-facing landing | ✅ Milestone 5: Public Landing Page |
+| **Day 12** | Landing page for mugdata.com, SEO meta tags | Public-facing landing | ✅ Milestone 5: Public Landing Page |
 | **Day 13** | Security (rate limiting, input validation, tunnel auth) | Hardened for public use | |
 | **Day 14** | Full testing, documentation, README, launch prep | **MVP Ready** | ✅ Milestone 6: MVP Launch |
 
@@ -156,6 +156,6 @@ DataMug is a computer vision application that lets users upload images and get A
 | Cloudflare Tunnel | Free |
 | Vercel (Hobby) | Free (100GB bandwidth) |
 | Vercel (Pro) | $20/mo if needed |
-| Domain (datamug.com) | ~$12/year |
+| Domain (mugdata.com) | ~$12/year |
 | GitHub | Free |
 | **Total MVP Cost** | **$0 — $12/year (domain only)** |
