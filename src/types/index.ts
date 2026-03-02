@@ -11,6 +11,7 @@ export interface AnalysisPreset {
   label: string;
   prompt: string;
   icon: string;
+  description?: string;
 }
 
 export interface OllamaModel {
@@ -18,12 +19,24 @@ export interface OllamaModel {
   name: string;
   size?: number;
   modified_at?: string;
+  details?: {
+    family?: string;
+    parameter_size?: string;
+    quantization_level?: string;
+  };
+}
+
+export interface ModelCapability {
+  vision: boolean;
+  label: string;
+  description: string;
+  sizeTag: string;
 }
 
 export interface VisionRequest {
   messages: Message[];
   model?: string;
-  image?: string; // base64 string (without data URL prefix)
+  image?: string;
 }
 
 export interface StreamChunk {

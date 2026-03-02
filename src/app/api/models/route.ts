@@ -5,31 +5,46 @@ export const runtime = "nodejs";
 export async function GET() {
   try {
     const endpoint = process.env.LLM_ENDPOINT || "http://localhost:11434/v1";
-    // Ollama's OpenAI-compatible models endpoint
+    const baseUrl = endpoint.replace("/v1", "");
+
+    // Try Ollama's native API first (richer data)
+    try {
+      const nativeResponse = await fetch(`${baseUrl}/api/tags`, {
+        signal: AbortSignal.timeout(10_000),
+      });
+
+      if (nativeResponse.ok) {
+        const nativeData = await nativeResponse.json();
+        const models = (nativeData.models || []).map((m: any) => ({
+          id: m.name,
+          name: m.name,
+          size: m.size,
+          modified_at: m.modified_at,
+          details: m.details
+            ? {
+                family: m.details.family,
+                parameter_size: m.details.parameter_size,
+                quantization_level: m.details.quantization_level,
+              }
+            : undefined,
+        }));
+
+        return NextResponse.json({ models });
+      }
+    } catch {
+      // Fallback to OpenAI-compatible endpoint
+    }
+
+    // Fallback: OpenAI-compatible /v1/models
     const response = await fetch(`${endpoint}/models`, {
       headers: {
         Authorization: `Bearer ${process.env.OPENAI_API_KEY || "ollama"}`,
       },
+      signal: AbortSignal.timeout(10_000),
     });
 
     if (!response.ok) {
-      // Fallback: try Ollama's native API
-      const baseUrl = endpoint.replace("/v1", "");
-      const nativeResponse = await fetch(`${baseUrl}/api/tags`);
-
-      if (!nativeResponse.ok) {
-        throw new Error("Failed to fetch models from Ollama");
-      }
-
-      const nativeData = await nativeResponse.json();
-      const models = (nativeData.models || []).map((m: any) => ({
-        id: m.name,
-        name: m.name,
-        size: m.size,
-        modified_at: m.modified_at,
-      }));
-
-      return NextResponse.json({ models });
+      throw new Error("Failed to fetch models from Ollama");
     }
 
     const data = await response.json();
@@ -46,7 +61,9 @@ export async function GET() {
 
     if (
       message.includes("ECONNREFUSED") ||
-      message.includes("fetch failed")
+      message.includes("fetch failed") ||
+      message.includes("ENOTFOUND") ||
+      message.includes("abort")
     ) {
       return NextResponse.json(
         {

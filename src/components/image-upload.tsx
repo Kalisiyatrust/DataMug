@@ -2,7 +2,8 @@
 
 import { useCallback, useState } from "react";
 import { useDropzone } from "react-dropzone";
-import { Upload, X, Image as ImageIcon, AlertCircle } from "lucide-react";
+import { Upload, X, Image as ImageIcon, AlertCircle, Info } from "lucide-react";
+import { processImage, getImageInfo, isSupportedImage } from "@/lib/image-utils";
 
 interface Props {
   image: string | null;
@@ -10,40 +11,46 @@ interface Props {
   onImageRemove: () => void;
 }
 
-const MAX_SIZE_MB = 10;
-const MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024;
+const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB raw (will be compressed)
 
 export function ImageUpload({ image, onImageSelect, onImageRemove }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [imageInfo, setImageInfo] = useState<{ sizeKB: number; format: string } | null>(null);
 
-  const processFile = useCallback(
-    (file: File) => {
+  const handleFile = useCallback(
+    async (file: File) => {
       setError(null);
 
-      if (!file.type.startsWith("image/")) {
-        setError("Please upload an image file (PNG, JPG, GIF, WebP).");
+      if (!isSupportedImage(file)) {
+        setError("Unsupported format. Use PNG, JPG, GIF, WebP, BMP, or SVG.");
         return;
       }
 
-      if (file.size > MAX_SIZE_BYTES) {
-        setError(`Image must be under ${MAX_SIZE_MB}MB. This file is ${(file.size / (1024 * 1024)).toFixed(1)}MB.`);
+      if (file.size > MAX_FILE_SIZE) {
+        setError(
+          `File is too large (${(file.size / (1024 * 1024)).toFixed(1)}MB). Max 20MB.`
+        );
         return;
       }
 
       setIsProcessing(true);
 
-      const reader = new FileReader();
-      reader.onload = () => {
-        const result = reader.result as string;
-        onImageSelect(result);
+      try {
+        // Process: resize to max 2048px, compress to JPEG, optimize
+        const dataUrl = await processImage(file);
+        const info = getImageInfo(dataUrl);
+        setImageInfo(info);
+        onImageSelect(dataUrl);
+      } catch (err) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Failed to process image. Try another file."
+        );
+      } finally {
         setIsProcessing(false);
-      };
-      reader.onerror = () => {
-        setError("Failed to read the image. Please try another file.");
-        setIsProcessing(false);
-      };
-      reader.readAsDataURL(file);
+      }
     },
     [onImageSelect]
   );
@@ -51,16 +58,18 @@ export function ImageUpload({ image, onImageSelect, onImageRemove }: Props) {
   const onDrop = useCallback(
     (acceptedFiles: File[]) => {
       const file = acceptedFiles[0];
-      if (!file) return;
-      processFile(file);
+      if (file) handleFile(file);
     },
-    [processFile]
+    [handleFile]
   );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     accept: {
-      "image/*": [".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg"],
+      "image/*": [
+        ".png", ".jpg", ".jpeg", ".gif", ".webp",
+        ".bmp", ".svg", ".tiff", ".tif", ".heic", ".heif", ".avif",
+      ],
     },
     maxFiles: 1,
     multiple: false,
@@ -68,33 +77,50 @@ export function ImageUpload({ image, onImageSelect, onImageRemove }: Props) {
   });
 
   if (image) {
+    const info = imageInfo || getImageInfo(image);
     return (
-      <div className="relative inline-block animate-fadeIn">
-        <div
-          className="rounded-xl overflow-hidden border"
-          style={{
-            borderColor: "var(--color-border)",
-            maxWidth: "240px",
-          }}
-        >
-          <img
-            src={image}
-            alt="Selected"
-            className="max-w-full h-auto object-contain"
-            style={{ maxHeight: "160px" }}
-          />
+      <div className="animate-fadeIn">
+        <div className="relative inline-block">
+          <div
+            className="rounded-xl overflow-hidden border"
+            style={{
+              borderColor: "var(--color-border)",
+              maxWidth: "240px",
+            }}
+          >
+            <img
+              src={image}
+              alt="Selected"
+              className="max-w-full h-auto object-contain"
+              style={{ maxHeight: "160px" }}
+            />
+          </div>
+          <button
+            onClick={() => {
+              onImageRemove();
+              setImageInfo(null);
+            }}
+            className="absolute -top-2 -right-2 p-1 rounded-full cursor-pointer transition-transform duration-150 hover:scale-110"
+            style={{
+              background: "var(--color-error)",
+              color: "white",
+              boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
+            }}
+          >
+            <X size={12} />
+          </button>
         </div>
-        <button
-          onClick={onImageRemove}
-          className="absolute -top-2 -right-2 p-1 rounded-full cursor-pointer transition-transform duration-150 hover:scale-110"
-          style={{
-            background: "var(--color-error)",
-            color: "white",
-            boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
-          }}
+        {/* Image info badge */}
+        <div
+          className="flex items-center gap-1.5 mt-1.5 text-xs"
+          style={{ color: "var(--color-text-secondary)" }}
         >
-          <X size={12} />
-        </button>
+          <Info size={10} />
+          {info.format} · {info.sizeKB < 1024 ? `${info.sizeKB} KB` : `${(info.sizeKB / 1024).toFixed(1)} MB`}
+          {info.sizeKB > 500 && (
+            <span style={{ color: "var(--color-success)" }}>· Compressed</span>
+          )}
+        </div>
       </div>
     );
   }
@@ -132,13 +158,16 @@ export function ImageUpload({ image, onImageSelect, onImageRemove }: Props) {
           <>
             <div
               className="w-7 h-7 border-2 border-t-transparent rounded-full animate-spin"
-              style={{ borderColor: "var(--color-accent)", borderTopColor: "transparent" }}
+              style={{
+                borderColor: "var(--color-accent)",
+                borderTopColor: "transparent",
+              }}
             />
             <p
               className="text-sm"
               style={{ color: "var(--color-text-secondary)" }}
             >
-              Processing...
+              Optimizing image...
             </p>
           </>
         ) : (
@@ -153,7 +182,10 @@ export function ImageUpload({ image, onImageSelect, onImageRemove }: Props) {
                 style={{ color: "var(--color-text-secondary)" }}
               >
                 Drag & drop, click to browse, or{" "}
-                <span className="font-medium" style={{ color: "var(--color-text)" }}>
+                <span
+                  className="font-medium"
+                  style={{ color: "var(--color-text)" }}
+                >
                   paste
                 </span>{" "}
                 from clipboard
@@ -162,14 +194,13 @@ export function ImageUpload({ image, onImageSelect, onImageRemove }: Props) {
                 className="text-xs mt-0.5"
                 style={{ color: "var(--color-text-secondary)" }}
               >
-                PNG, JPG, GIF, WebP — up to {MAX_SIZE_MB}MB
+                PNG, JPG, GIF, WebP, BMP, HEIC, TIFF — auto-compressed
               </p>
             </div>
           </>
         )}
       </div>
 
-      {/* Error message */}
       {error && (
         <div
           className="flex items-center gap-1.5 mt-2 text-xs animate-slideDown"
