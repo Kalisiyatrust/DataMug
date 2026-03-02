@@ -47,3 +47,22 @@ export interface StreamChunk {
     finish_reason?: string | null;
   }>;
 }
+
+/**
+ * Exported thread format for import/export.
+ */
+export interface ExportedThread {
+  id: string;
+  title: string;
+  messages: Message[];
+  createdAt: number;
+  model?: string;
+  pinned?: boolean;
+}
+
+export interface ExportData {
+  version: number;
+  exportedAt: number;
+  app: "DataMug";
+  threads: ExportedThread[];
+}

@@ -10,6 +10,7 @@ import {
   createThread,
   generateTitle,
   migrateFromLegacy,
+  togglePin,
   type ChatThread,
 } from "@/lib/threads";
 import { processImage } from "@/lib/image-utils";
@@ -203,6 +204,17 @@ export function ChatInterface() {
         prev.map((t) => (t.id === id ? updated : t))
       );
     }
+  }
+
+  function handleTogglePin(id: string) {
+    const updated = togglePin(id);
+    if (updated) {
+      setThreads(getThreads());
+    }
+  }
+
+  function handleImportComplete() {
+    setThreads(getThreads());
   }
 
   const handleSubmit = useCallback(
@@ -420,6 +432,8 @@ export function ChatInterface() {
         onNewThread={handleNewThread}
         onDeleteThread={handleDeleteThread}
         onRenameThread={handleRenameThread}
+        onTogglePin={handleTogglePin}
+        onImportComplete={handleImportComplete}
         isOpen={sidebarOpen}
         onToggle={() => setSidebarOpen(!sidebarOpen)}
       />
