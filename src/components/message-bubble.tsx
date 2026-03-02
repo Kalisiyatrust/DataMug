@@ -5,13 +5,18 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { Message } from "@/types";
 import { User, Bot, Copy, Check, ChevronDown, ChevronUp } from "lucide-react";
+import { ShareMenu } from "./share-menu";
+import { LazyImage } from "./optimized-image";
 
 interface Props {
   message: Message;
   isStreaming?: boolean;
+  allMessages?: Message[];
+  threadTitle?: string;
+  model?: string;
 }
 
-export function MessageBubble({ message, isStreaming }: Props) {
+export function MessageBubble({ message, isStreaming, allMessages, threadTitle, model }: Props) {
   const isUser = message.role === "user";
   const [copied, setCopied] = useState(false);
   const [imageExpanded, setImageExpanded] = useState(false);
@@ -34,6 +39,14 @@ export function MessageBubble({ message, isStreaming }: Props) {
     }
   }
 
+  // Collect all images for this message (multi-image + legacy single)
+  const messageImages: string[] =
+    message.images && message.images.length > 0
+      ? message.images
+      : message.image
+        ? [message.image]
+        : [];
+
   return (
     <div
       className={`flex gap-3 group ${isUser ? "flex-row-reverse" : "flex-row"}`}
@@ -55,38 +68,57 @@ export function MessageBubble({ message, isStreaming }: Props) {
       <div
         className={`flex flex-col gap-1.5 max-w-[85%] sm:max-w-[75%] ${isUser ? "items-end" : "items-start"}`}
       >
-        {/* Image preview */}
-        {message.image && (
-          <div className="relative">
-            <button
-              onClick={() => setImageExpanded(!imageExpanded)}
-              className="rounded-xl overflow-hidden border cursor-pointer transition-all duration-300"
-              style={{
-                borderColor: "var(--color-border)",
-                maxWidth: imageExpanded ? "100%" : "200px",
-              }}
-            >
-              <img
-                src={message.image}
-                alt="Uploaded"
-                className="w-full h-auto object-contain transition-all duration-300"
-                style={{ maxHeight: imageExpanded ? "500px" : "120px" }}
-              />
-            </button>
-            <button
-              onClick={() => setImageExpanded(!imageExpanded)}
-              className="absolute bottom-2 right-2 p-1 rounded-md cursor-pointer"
-              style={{
-                background: "rgba(0,0,0,0.6)",
-                color: "white",
-              }}
-            >
-              {imageExpanded ? (
-                <ChevronUp size={12} />
-              ) : (
-                <ChevronDown size={12} />
-              )}
-            </button>
+        {/* Image preview(s) */}
+        {messageImages.length > 0 && (
+          <div className={`flex flex-wrap gap-2 ${messageImages.length === 1 ? "" : ""}`}>
+            {messageImages.map((img, idx) => (
+              <div key={idx} className="relative">
+                <button
+                  onClick={() => setImageExpanded(!imageExpanded)}
+                  className="rounded-xl overflow-hidden border cursor-pointer transition-all duration-300"
+                  style={{
+                    borderColor: "var(--color-border)",
+                    maxWidth: imageExpanded ? "100%" : "200px",
+                  }}
+                >
+                  <LazyImage
+                    src={img}
+                    alt={`Uploaded ${idx + 1}`}
+                    className="w-full h-auto object-contain transition-all duration-300"
+                    style={{ maxHeight: imageExpanded ? "500px" : "120px" }}
+                  />
+                </button>
+                {messageImages.length > 1 && (
+                  <div
+                    className="absolute bottom-2 left-2 text-xs font-medium px-1.5 rounded"
+                    style={{
+                      background: "rgba(0,0,0,0.55)",
+                      color: "white",
+                      fontSize: "0.65rem",
+                      lineHeight: "1.4",
+                    }}
+                  >
+                    {idx + 1}
+                  </div>
+                )}
+                {idx === messageImages.length - 1 && (
+                  <button
+                    onClick={() => setImageExpanded(!imageExpanded)}
+                    className="absolute bottom-2 right-2 p-1 rounded-md cursor-pointer"
+                    style={{
+                      background: "rgba(0,0,0,0.6)",
+                      color: "white",
+                    }}
+                  >
+                    {imageExpanded ? (
+                      <ChevronUp size={12} />
+                    ) : (
+                      <ChevronDown size={12} />
+                    )}
+                  </button>
+                )}
+              </div>
+            ))}
           </div>
         )}
 
@@ -147,29 +179,37 @@ export function MessageBubble({ message, isStreaming }: Props) {
               )}
             </div>
 
-            {/* Copy button for assistant messages */}
+            {/* Action buttons for assistant messages */}
             {!isUser && !isStreaming && (
-              <button
-                onClick={handleCopyMessage}
-                className="absolute -bottom-6 left-2 flex items-center gap-1 px-2 py-0.5 rounded text-xs opacity-0 group-hover/msg:opacity-100 transition-opacity duration-200 cursor-pointer"
-                style={{
-                  background: "var(--color-surface-hover)",
-                  color: "var(--color-text-secondary)",
-                }}
-                title="Copy response"
-              >
-                {copied ? (
-                  <>
-                    <Check size={10} />
-                    Copied
-                  </>
-                ) : (
-                  <>
-                    <Copy size={10} />
-                    Copy
-                  </>
-                )}
-              </button>
+              <div className="absolute -bottom-6 left-2 flex items-center gap-1 opacity-0 group-hover/msg:opacity-100 transition-opacity duration-200">
+                <button
+                  onClick={handleCopyMessage}
+                  className="flex items-center gap-1 px-2 py-0.5 rounded text-xs cursor-pointer"
+                  style={{
+                    background: "var(--color-surface-hover)",
+                    color: "var(--color-text-secondary)",
+                  }}
+                  title="Copy response"
+                >
+                  {copied ? (
+                    <>
+                      <Check size={10} />
+                      Copied
+                    </>
+                  ) : (
+                    <>
+                      <Copy size={10} />
+                      Copy
+                    </>
+                  )}
+                </button>
+                <ShareMenu
+                  message={message}
+                  allMessages={allMessages || []}
+                  threadTitle={threadTitle}
+                  model={model}
+                />
+              </div>
             )}
           </div>
         )}
