@@ -12,8 +12,6 @@
  * @module lib/twilio-client
  */
 
-'use server';
-
 import { createHmac } from 'crypto';
 import type { BrandConfig } from '@/types/whatsapp';
 import { getTwilioFrom } from '@/lib/brands';

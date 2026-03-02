@@ -12,8 +12,6 @@
  * @module lib/campaign-engine
  */
 
-'use server';
-
 import { randomUUID } from 'crypto';
 import type {
   Campaign,

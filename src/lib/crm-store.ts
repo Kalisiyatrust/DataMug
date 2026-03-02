@@ -18,8 +18,6 @@
  * @module lib/crm-store
  */
 
-'use server';
-
 import fs from 'fs';
 import path from 'path';
 import { randomUUID } from 'crypto';
@@ -39,8 +37,12 @@ import type {
 // Storage directory setup
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Root directory for all WhatsApp JSON stores */
-const DATA_DIR = path.join(process.cwd(), 'data', 'whatsapp');
+/** Root directory for all WhatsApp JSON stores — uses /tmp on serverless */
+const DATA_DIR = path.join(
+  process.env.VERCEL ? '/tmp' : process.cwd(),
+  'data',
+  'whatsapp'
+);
 
 /** Paths to each store file */
 const STORE_PATHS = {

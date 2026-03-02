@@ -20,8 +20,6 @@
  * @module lib/ai-responder
  */
 
-'use server';
-
 import OpenAI from 'openai';
 import type { BrandConfig, Contact, Message, IntentResult } from '@/types/whatsapp';
 import { getBrand } from '@/lib/brands';
