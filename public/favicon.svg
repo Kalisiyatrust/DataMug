@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <rect width="32" height="32" rx="6" fill="#b45309"/>
+  <g fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Cup body -->
+    <rect x="8" y="12" width="12" height="12" rx="2" fill="#fff" opacity="0.9"/>
+    <!-- Handle -->
+    <path d="M20 15 C23 15, 24 18, 20 21" fill="none"/>
+    <!-- Steam -->
+    <path d="M12 10 C12 8, 13 7, 12 5" opacity="0.6"/>
+    <path d="M16 10 C16 8, 17 7, 16 5" opacity="0.6"/>
+  </g>
+</svg>
