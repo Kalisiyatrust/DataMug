@@ -274,7 +274,7 @@ export default function ContactsPage() {
   };
 
   const handleAddContact = (data: ContactFormData) => {
-    const newContact: Contact = {
+    const newContact = {
       id: String(Date.now()),
       ...data,
       email: data.email || "",
