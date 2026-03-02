@@ -9,6 +9,7 @@ import {
   ArrowRight,
   Coffee,
   Github,
+  MessageCircle,
 } from "lucide-react";
 
 const FEATURES = [
@@ -108,6 +109,18 @@ export default function LandingPage() {
             >
               <Github size={18} />
             </a>
+            <Link
+              href="/whatsapp"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-200 border"
+              style={{
+                borderColor: "var(--color-border)",
+                background: "var(--color-surface)",
+                color: "var(--color-text)",
+              }}
+            >
+              <MessageCircle size={14} className="text-green-600" />
+              WhatsApp
+            </Link>
             <Link
               href="/chat"
               className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-200"
@@ -352,6 +365,21 @@ export default function LandingPage() {
           </Link>
         </div>
       </section>
+
+      {/* WhatsApp CTA floating badge */}
+      <div className="fixed bottom-6 right-6 z-50">
+        <Link
+          href="/whatsapp"
+          className="flex items-center gap-2 px-4 py-3 rounded-2xl shadow-lg text-sm font-medium transition-all duration-200 hover:scale-105"
+          style={{
+            background: "#16a34a",
+            color: "white",
+          }}
+        >
+          <MessageCircle size={18} />
+          <span className="hidden sm:inline">WhatsApp Dashboard</span>
+        </Link>
+      </div>
 
       {/* Footer */}
       <footer

@@ -38,6 +38,17 @@ Live at [mugdata.com](https://mugdata.com) | [GitHub](https://github.com/Kalisiy
 - **Hosting**: Vercel
 - **Domain**: mugdata.com
 
+### WhatsApp Marketing Suite (v0.4.0)
+- **Multi-Brand Support** — Three brands: Kalisiya Foundation, Eloi Consulting, DataMug, each with its own WhatsApp number and AI persona
+- **AI Conversational Engine** — Ollama-powered chatbot that responds like a human, qualifies leads, positions services, and handles objections
+- **CRM & Contact Management** — Import contacts from CSV, manual entry, tagging, lead scoring (0-100), stage tracking (new → converted)
+- **Campaign Manager** — Create campaigns with message templates, target by tags/stages, schedule sends, track delivery/read/reply rates
+- **Drip Sequences** — Multi-step automated follow-up sequences with conditions (no reply, replied, any)
+- **WhatsApp Conversations** — Real-time chat interface, AI-suggested replies, message history
+- **Marketing Analytics** — Dashboard with KPIs, lead funnel, brand breakdown, message volume
+- **Twilio Integration** — Webhook for inbound messages, delivery status tracking, rate-limited sending
+- **Template System** — Pre-built and custom message templates with variable substitution ({{name}}, {{company}}, etc.)
+
 ## Architecture
 
 ```
@@ -45,9 +56,9 @@ Browser (mugdata.com)
   ↓ HTTPS
 Vercel (Next.js API Routes)
   ↓ HTTPS
-Cloudflare Tunnel
-  ↓ HTTP
-Local Ollama (localhost:11434)
+Cloudflare Tunnel              Twilio WhatsApp API
+  ↓ HTTP                         ↕ Webhook
+Local Ollama (localhost:11434)  /api/whatsapp/webhook
 ```
 
 ## Quick Start
@@ -83,6 +94,9 @@ npm run dev
 | `LLM_ENDPOINT` | Ollama API endpoint URL | `https://ollama.mugdata.com/v1` |
 | `OPENAI_API_KEY` | API key for Ollama (any string) | `ollama` |
 | `DEFAULT_MODEL` | Default vision model | `llava:7b` |
+| `TWILIO_ACCOUNT_SID` | Twilio account SID | — |
+| `TWILIO_AUTH_TOKEN` | Twilio account auth token | — |
+| `NEXT_PUBLIC_BASE_URL` | Public URL for webhook | `https://mugdata.com` |
 
 ### Supported Vision Models
 
@@ -121,11 +135,36 @@ src/
 │   ├── sitemap.ts            # Dynamic sitemap
 │   ├── chat/
 │   │   └── page.tsx          # Chat application page
+│   ├── whatsapp/             # WhatsApp Marketing Dashboard
+│   │   ├── layout.tsx        # Dashboard layout with sidebar
+│   │   ├── layout-client.tsx # Client-side sidebar navigation
+│   │   ├── page.tsx          # Analytics dashboard
+│   │   ├── conversations/    # WhatsApp chat interface
+│   │   ├── contacts/         # CRM contact management
+│   │   ├── campaigns/        # Campaign manager
+│   │   ├── templates/        # Message template editor
+│   │   └── settings/         # System settings
 │   └── api/
-│       ├── vision/route.ts   # Vision API with streaming, rate limiting
+│       ├── vision/route.ts   # Vision API with streaming
 │       ├── models/route.ts   # Model listing endpoint
-│       └── health/route.ts   # Health check endpoint
+│       ├── health/route.ts   # Health check endpoint
+│       └── whatsapp/         # WhatsApp API routes
+│           ├── webhook/      # Twilio inbound webhook
+│           ├── send/         # Manual message sending
+│           ├── contacts/     # Contact CRUD + CSV import
+│           ├── campaigns/    # Campaign management
+│           ├── templates/    # Template CRUD
+│           ├── analytics/    # Marketing analytics
+│           └── status/       # Delivery status callback
 ├── components/
+│   ├── whatsapp/             # WhatsApp Marketing components
+│   │   ├── brand-badge.tsx   # Brand indicator with colors
+│   │   ├── stage-badge.tsx   # Lead stage badges
+│   │   ├── score-indicator.tsx # Lead score display
+│   │   ├── contact-form.tsx  # Contact create/edit form
+│   │   ├── csv-import-modal.tsx # CSV import wizard
+│   │   ├── template-editor.tsx # Template editor with preview
+│   │   └── message-bubble.tsx # WhatsApp-style message bubbles
 │   ├── chat-interface.tsx    # Main chat UI (orchestrates all features)
 │   ├── message-bubble.tsx    # Message display with markdown
 │   ├── image-upload.tsx      # Single image upload with drag-drop
@@ -160,10 +199,16 @@ src/
 │   ├── validation.ts         # Input sanitization
 │   ├── prompt-templates.ts   # Template CRUD (Week 3)
 │   ├── gallery.ts            # Image gallery store (Week 3)
-│   └── analytics.ts          # Usage tracking (Week 3)
+│   ├── analytics.ts          # Usage tracking (Week 3)
+│   ├── brands.ts             # Multi-brand WhatsApp config
+│   ├── twilio-client.ts      # Twilio REST API client
+│   ├── crm-store.ts          # CRM JSON data store
+│   ├── ai-responder.ts       # AI conversational engine
+│   └── campaign-engine.ts    # Campaign & drip management
 ├── middleware.ts              # Security headers, CSP, path blocking
 └── types/
-    └── index.ts              # TypeScript interfaces
+    ├── index.ts              # Vision TypeScript interfaces
+    └── whatsapp.ts           # WhatsApp/CRM type definitions
 public/
 ├── manifest.json             # PWA manifest (Week 3)
 ├── sw.js                     # Service worker (Week 3)
@@ -178,6 +223,7 @@ public/
 - **Week 1 (Days 1-7)**: Core chat UI, vision API, streaming, image handling, threads, presets, deployment
 - **Week 2 (Days 8-14)**: Responsive design, multi-image, export/share, optimizations, landing page, security, docs
 - **Week 3 (Days 15-21)**: Templates, gallery, batch analysis, command palette, settings, analytics, PWA, polish
+- **Week 4 (v0.4.0)**: WhatsApp Marketing Suite — multi-brand CRM, AI chatbot, campaigns, drip sequences, Twilio integration
 
 ## License
 
