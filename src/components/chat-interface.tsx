@@ -7,9 +7,11 @@ import { ImageUpload } from "./image-upload";
 import { MessageBubble } from "./message-bubble";
 import { ModelSelector } from "./model-selector";
 import { PresetButtons } from "./preset-buttons";
+import { ConnectionBanner } from "./connection-banner";
+import { EmptyState } from "./empty-state";
+import { TypingIndicator } from "./typing-indicator";
 import {
   Send,
-  Loader2,
   ImagePlus,
   Trash2,
   StopCircle,
@@ -19,12 +21,15 @@ import {
 export function ChatInterface() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
-  const [image, setImage] = useState<string | null>(null); // base64 data URL
+  const [image, setImage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedModel, setSelectedModel] = useState("");
   const [models, setModels] = useState<OllamaModel[]>([]);
   const [showUpload, setShowUpload] = useState(false);
   const [streamingContent, setStreamingContent] = useState("");
+  const [connectionStatus, setConnectionStatus] = useState<
+    "connected" | "disconnected" | "checking"
+  >("checking");
   const [connectionError, setConnectionError] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -36,7 +41,7 @@ export function ChatInterface() {
     fetchModels();
   }, []);
 
-  // Auto-scroll to bottom
+  // Smooth scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, streamingContent]);
@@ -46,32 +51,46 @@ export function ChatInterface() {
     const saved = localStorage.getItem("datamug-history");
     if (saved) {
       try {
-        setMessages(JSON.parse(saved));
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) setMessages(parsed);
       } catch {
         // Invalid JSON, ignore
       }
     }
   }, []);
 
-  // Save chat history
+  // Save chat history (debounced)
   useEffect(() => {
     if (messages.length > 0) {
-      localStorage.setItem("datamug-history", JSON.stringify(messages));
+      const timer = setTimeout(() => {
+        localStorage.setItem("datamug-history", JSON.stringify(messages));
+      }, 500);
+      return () => clearTimeout(timer);
     }
   }, [messages]);
 
+  // Auto-resize textarea
+  useEffect(() => {
+    const textarea = inputRef.current;
+    if (textarea) {
+      textarea.style.height = "auto";
+      textarea.style.height = `${Math.min(textarea.scrollHeight, 120)}px`;
+    }
+  }, [input]);
+
   async function fetchModels() {
+    setConnectionStatus("checking");
     try {
       const res = await fetch("/api/models");
       const data = await res.json();
       if (data.error) {
         setConnectionError(data.error);
+        setConnectionStatus("disconnected");
       } else {
         setModels(data.models || []);
         setConnectionError(null);
-        // Set default model
+        setConnectionStatus("connected");
         if (data.models?.length > 0 && !selectedModel) {
-          // Prefer vision models
           const visionModel = data.models.find(
             (m: OllamaModel) =>
               m.name.includes("llava") ||
@@ -83,9 +102,8 @@ export function ChatInterface() {
         }
       }
     } catch {
-      setConnectionError(
-        "Cannot connect to Ollama. Make sure it is running."
-      );
+      setConnectionError("Cannot connect to Ollama. Make sure it is running.");
+      setConnectionStatus("disconnected");
     }
   }
 
@@ -95,7 +113,6 @@ export function ChatInterface() {
       if (!messageText && !image) return;
       if (isLoading) return;
 
-      // Create user message
       const userMessage: Message = {
         id: generateId(),
         role: "user",
@@ -110,7 +127,6 @@ export function ChatInterface() {
       setStreamingContent("");
       setConnectionError(null);
 
-      // Set up abort controller
       abortControllerRef.current = new AbortController();
 
       try {
@@ -133,19 +149,21 @@ export function ChatInterface() {
           );
         }
 
-        // Read the SSE stream
         const reader = res.body?.getReader();
         if (!reader) throw new Error("No response stream");
 
         const decoder = new TextDecoder();
         let fullContent = "";
+        let buffer = "";
 
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
 
-          const text = decoder.decode(value, { stream: true });
-          const lines = text.split("\n");
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          // Keep the last potentially incomplete line in the buffer
+          buffer = lines.pop() || "";
 
           for (const line of lines) {
             if (line.startsWith("data: ")) {
@@ -162,19 +180,21 @@ export function ChatInterface() {
                   throw new Error(parsed.error);
                 }
               } catch (e) {
-                // Skip invalid JSON chunks
-                if (e instanceof Error && e.message !== "Stream error") {
-                  // Only throw if it's an actual error, not a parse error
-                  if (data !== "[DONE]" && !data.startsWith("{")) {
-                    continue;
-                  }
+                if (
+                  e instanceof Error &&
+                  e.message !== "Stream error" &&
+                  e.message.includes("Unexpected")
+                ) {
+                  continue; // Skip JSON parse errors on partial chunks
+                }
+                if (e instanceof Error && !e.message.includes("Unexpected")) {
+                  throw e;
                 }
               }
             }
           }
         }
 
-        // Add assistant message
         if (fullContent) {
           const assistantMessage: Message = {
             id: generateId(),
@@ -186,34 +206,32 @@ export function ChatInterface() {
         }
       } catch (error) {
         if (error instanceof Error && error.name === "AbortError") {
-          // User cancelled — add partial content if any
           if (streamingContent) {
             const partialMessage: Message = {
               id: generateId(),
               role: "assistant",
-              content: streamingContent + "\n\n_(Stopped by user)_",
+              content: streamingContent + "\n\n---\n_Generation stopped_",
               timestamp: Date.now(),
             };
             setMessages((prev) => [...prev, partialMessage]);
           }
         } else {
           const errMsg =
-            error instanceof Error
-              ? error.message
-              : "An error occurred";
+            error instanceof Error ? error.message : "An error occurred";
 
-          // Check if it's a connection error
           if (
             errMsg.includes("Cannot connect") ||
-            errMsg.includes("ECONNREFUSED")
+            errMsg.includes("ECONNREFUSED") ||
+            errMsg.includes("fetch failed")
           ) {
             setConnectionError(errMsg);
+            setConnectionStatus("disconnected");
           }
 
           const errorMessage: Message = {
             id: generateId(),
             role: "assistant",
-            content: `**Error:** ${errMsg}`,
+            content: `**Error:** ${errMsg}\n\nMake sure Ollama is running with a vision model. Try: \`ollama serve\` and \`ollama pull llava:7b\``,
             timestamp: Date.now(),
           };
           setMessages((prev) => [...prev, errorMessage]);
@@ -251,116 +269,115 @@ export function ChatInterface() {
       e.preventDefault();
       handleSubmit();
     }
+    // Cmd/Ctrl + Shift + V to toggle image upload
+    if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === "v") {
+      e.preventDefault();
+      setShowUpload(!showUpload);
+    }
+    // Escape to cancel generation
+    if (e.key === "Escape" && isLoading) {
+      handleStop();
+    }
   }
+
+  // Global paste handler for images
+  useEffect(() => {
+    function handleGlobalPaste(e: ClipboardEvent) {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (const item of Array.from(items)) {
+        if (item.type.startsWith("image/")) {
+          e.preventDefault();
+          const file = item.getAsFile();
+          if (file) {
+            const reader = new FileReader();
+            reader.onload = () => {
+              setImage(reader.result as string);
+              setShowUpload(false);
+            };
+            reader.readAsDataURL(file);
+          }
+          break;
+        }
+      }
+    }
+    window.addEventListener("paste", handleGlobalPaste);
+    return () => window.removeEventListener("paste", handleGlobalPaste);
+  }, []);
 
   function handleImageSelect(dataUrl: string) {
     setImage(dataUrl);
     setShowUpload(false);
+    inputRef.current?.focus();
   }
-
-  const hasImage = !!image;
 
   return (
     <div className="flex flex-col h-full max-w-4xl mx-auto w-full">
       {/* Header */}
-      <header className="flex items-center justify-between px-4 py-3 border-b"
-        style={{ borderColor: "var(--color-border)" }}
+      <header
+        className="flex items-center justify-between px-4 sm:px-6 py-3 border-b backdrop-blur-sm sticky top-0 z-10"
+        style={{
+          borderColor: "var(--color-border)",
+          background: "color-mix(in srgb, var(--color-bg) 85%, transparent)",
+        }}
       >
-        <div className="flex items-center gap-2">
-          <Coffee size={24} style={{ color: "var(--color-accent)" }} />
-          <h1 className="text-lg font-semibold">DataMug</h1>
-          <span
-            className="text-xs px-2 py-0.5 rounded-full"
-            style={{
-              background: "var(--color-accent-light)",
-              color: "var(--color-accent)",
-            }}
+        <div className="flex items-center gap-2.5">
+          <div
+            className="w-8 h-8 rounded-lg flex items-center justify-center"
+            style={{ background: "var(--color-accent)" }}
           >
-            Vision AI
-          </span>
+            <Coffee size={18} color="white" />
+          </div>
+          <div>
+            <h1 className="text-base font-semibold leading-tight">DataMug</h1>
+            <p
+              className="text-xs leading-tight"
+              style={{ color: "var(--color-text-secondary)" }}
+            >
+              Vision AI
+            </p>
+          </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <ModelSelector
             models={models}
             selected={selectedModel}
             onChange={setSelectedModel}
             onRefresh={fetchModels}
+            connectionStatus={connectionStatus}
           />
           {messages.length > 0 && (
             <button
               onClick={handleClearHistory}
-              className="p-2 rounded-lg transition-colors cursor-pointer"
+              className="p-2 rounded-lg hover:bg-[var(--color-surface-hover)] transition-colors cursor-pointer"
               style={{ color: "var(--color-text-secondary)" }}
               title="Clear chat history"
             >
-              <Trash2 size={18} />
+              <Trash2 size={16} />
             </button>
           )}
         </div>
       </header>
 
       {/* Connection Error Banner */}
-      {connectionError && (
-        <div
-          className="px-4 py-3 text-sm flex items-center gap-2"
-          style={{
-            background: "var(--color-error)",
-            color: "white",
-          }}
-        >
-          <span className="font-medium">Connection Error:</span>
-          <span>{connectionError}</span>
-          <button
-            onClick={fetchModels}
-            className="ml-auto underline cursor-pointer"
-          >
-            Retry
-          </button>
-        </div>
-      )}
+      <ConnectionBanner
+        status={connectionStatus}
+        error={connectionError}
+        onRetry={fetchModels}
+      />
 
       {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto px-4 py-6">
+      <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-6 scroll-smooth">
         {messages.length === 0 && !isLoading ? (
-          <div className="flex flex-col items-center justify-center h-full gap-6 text-center">
-            <div className="flex flex-col items-center gap-2">
-              <Coffee
-                size={48}
-                style={{ color: "var(--color-text-secondary)" }}
-              />
-              <h2 className="text-2xl font-semibold">
-                Welcome to DataMug
-              </h2>
-              <p style={{ color: "var(--color-text-secondary)" }}>
-                Upload an image and ask questions about it, or use a
-                preset below.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-w-lg">
-              {ANALYSIS_PRESETS.map((preset) => (
-                <button
-                  key={preset.id}
-                  onClick={() => {
-                    setShowUpload(true);
-                    setInput(preset.prompt);
-                  }}
-                  className="flex flex-col items-center gap-1.5 p-3 rounded-xl text-sm transition-colors cursor-pointer border"
-                  style={{
-                    borderColor: "var(--color-border)",
-                    background: "var(--color-surface)",
-                  }}
-                >
-                  <span className="text-xs font-medium">
-                    {preset.label}
-                  </span>
-                </button>
-              ))}
-            </div>
-          </div>
+          <EmptyState
+            onPresetClick={(prompt) => {
+              setShowUpload(true);
+              setInput(prompt);
+            }}
+          />
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-6">
             {messages.map((msg) => (
               <MessageBubble key={msg.id} message={msg} />
             ))}
@@ -378,21 +395,9 @@ export function ChatInterface() {
               />
             )}
 
-            {/* Loading indicator */}
+            {/* Typing indicator */}
             {isLoading && !streamingContent && (
-              <div className="flex items-center gap-2 px-4 py-3">
-                <Loader2
-                  size={16}
-                  className="animate-spin"
-                  style={{ color: "var(--color-accent)" }}
-                />
-                <span
-                  className="text-sm"
-                  style={{ color: "var(--color-text-secondary)" }}
-                >
-                  Analyzing{hasImage ? " image" : ""}...
-                </span>
-              </div>
+              <TypingIndicator hasImage={!!image} />
             )}
           </div>
         )}
@@ -401,48 +406,45 @@ export function ChatInterface() {
 
       {/* Input Area */}
       <div
-        className="border-t px-4 py-3"
-        style={{ borderColor: "var(--color-border)" }}
+        className="border-t px-4 sm:px-6 py-3 space-y-3"
+        style={{
+          borderColor: "var(--color-border)",
+          background: "var(--color-bg)",
+        }}
       >
         {/* Image Preview & Upload */}
         {(showUpload || image) && (
-          <div className="mb-3">
-            <ImageUpload
-              image={image}
-              onImageSelect={handleImageSelect}
-              onImageRemove={() => setImage(null)}
-            />
-          </div>
+          <ImageUpload
+            image={image}
+            onImageSelect={handleImageSelect}
+            onImageRemove={() => setImage(null)}
+          />
         )}
 
         {/* Preset buttons when image is loaded */}
         {image && !isLoading && (
-          <div className="mb-3">
-            <PresetButtons onSelect={handlePresetClick} />
-          </div>
+          <PresetButtons onSelect={handlePresetClick} />
         )}
 
         {/* Input row */}
         <div className="flex items-end gap-2">
           <button
             onClick={() => setShowUpload(!showUpload)}
-            className="p-2.5 rounded-xl transition-colors cursor-pointer"
+            className="p-2.5 rounded-xl transition-all duration-200 cursor-pointer flex-shrink-0"
             style={{
               background: showUpload
-                ? "var(--color-accent-light)"
-                : "var(--color-surface)",
-              color: showUpload
                 ? "var(--color-accent)"
-                : "var(--color-text-secondary)",
+                : "var(--color-surface)",
+              color: showUpload ? "white" : "var(--color-text-secondary)",
               border: `1px solid ${showUpload ? "var(--color-accent)" : "var(--color-border)"}`,
             }}
-            title="Upload image"
+            title="Upload image (Ctrl+Shift+V)"
           >
-            <ImagePlus size={20} />
+            <ImagePlus size={18} />
           </button>
 
           <div
-            className="flex-1 flex items-end rounded-xl border"
+            className="flex-1 flex items-end rounded-xl border transition-colors duration-200"
             style={{
               borderColor: "var(--color-border)",
               background: "var(--color-surface)",
@@ -455,11 +457,11 @@ export function ChatInterface() {
               onKeyDown={handleKeyDown}
               placeholder={
                 image
-                  ? "Ask about this image..."
-                  : "Upload an image and ask a question..."
+                  ? "Ask about this image... (Enter to send)"
+                  : "Upload an image and ask a question... (Ctrl+Shift+V for image)"
               }
               rows={1}
-              className="flex-1 px-4 py-2.5 bg-transparent outline-none resize-none text-sm"
+              className="flex-1 px-4 py-2.5 bg-transparent outline-none resize-none text-sm leading-relaxed"
               style={{
                 color: "var(--color-text)",
                 maxHeight: "120px",
@@ -471,38 +473,49 @@ export function ChatInterface() {
           {isLoading ? (
             <button
               onClick={handleStop}
-              className="p-2.5 rounded-xl transition-colors cursor-pointer"
+              className="p-2.5 rounded-xl transition-all duration-200 cursor-pointer flex-shrink-0 animate-pulse"
               style={{
                 background: "var(--color-error)",
                 color: "white",
               }}
-              title="Stop generation"
+              title="Stop generation (Esc)"
             >
-              <StopCircle size={20} />
+              <StopCircle size={18} />
             </button>
           ) : (
             <button
               onClick={() => handleSubmit()}
               disabled={!input.trim() && !image}
-              className="p-2.5 rounded-xl transition-colors cursor-pointer disabled:opacity-40"
+              className="p-2.5 rounded-xl transition-all duration-200 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed flex-shrink-0"
               style={{
-                background: "var(--color-accent)",
-                color: "white",
+                background:
+                  input.trim() || image
+                    ? "var(--color-accent)"
+                    : "var(--color-surface-hover)",
+                color:
+                  input.trim() || image
+                    ? "white"
+                    : "var(--color-text-secondary)",
               }}
-              title="Send message"
+              title="Send message (Enter)"
             >
-              <Send size={20} />
+              <Send size={18} />
             </button>
           )}
         </div>
 
-        <p
-          className="text-xs mt-2 text-center"
+        {/* Footer */}
+        <div
+          className="flex items-center justify-between text-xs"
           style={{ color: "var(--color-text-secondary)" }}
         >
-          DataMug uses local AI models via Ollama — your images never leave
-          your network.
-        </p>
+          <span>
+            Your images never leave your network.
+          </span>
+          <span className="hidden sm:inline">
+            Enter to send · Shift+Enter for new line · Esc to stop
+          </span>
+        </div>
       </div>
     </div>
   );

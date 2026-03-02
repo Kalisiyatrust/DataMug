@@ -5,6 +5,8 @@ import { DEFAULT_SYSTEM_PROMPT } from "@/lib/constants";
 export const runtime = "nodejs";
 export const maxDuration = 120; // 2 minutes max for vision processing
 
+const TIMEOUT_MS = 90_000; // 90 second timeout for Ollama response
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -14,6 +16,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         { error: "Message or image is required" },
         { status: 400 }
+      );
+    }
+
+    // Validate image size (rough check on base64 string length)
+    if (image && image.length > 15_000_000) {
+      return NextResponse.json(
+        { error: "Image is too large. Please use an image under 10MB." },
+        { status: 413 }
       );
     }
 
@@ -66,8 +76,8 @@ export async function POST(req: NextRequest) {
       messages.push({ role: "user", content: message });
     }
 
-    // Create streaming completion
-    const stream = await client.chat.completions.create({
+    // Create streaming completion with timeout
+    const streamPromise = client.chat.completions.create({
       model: selectedModel,
       messages,
       stream: true,
@@ -75,15 +85,25 @@ export async function POST(req: NextRequest) {
       max_tokens: 4096,
     });
 
-    // Convert to ReadableStream for the response
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(
+        () => reject(new Error("Request timed out. The model may be loading or the image is too complex.")),
+        TIMEOUT_MS
+      );
+    });
+
+    const stream = await Promise.race([streamPromise, timeoutPromise]);
+
+    // Convert to ReadableStream with SSE format
     const encoder = new TextEncoder();
     const readable = new ReadableStream({
       async start(controller) {
         try {
+          let hasContent = false;
           for await (const chunk of stream) {
             const content = chunk.choices[0]?.delta?.content;
             if (content) {
-              // Send as SSE format
+              hasContent = true;
               const data = JSON.stringify({ content });
               controller.enqueue(encoder.encode(`data: ${data}\n\n`));
             }
@@ -91,6 +111,18 @@ export async function POST(req: NextRequest) {
             if (chunk.choices[0]?.finish_reason === "stop") {
               controller.enqueue(encoder.encode("data: [DONE]\n\n"));
             }
+          }
+
+          // If we got no content at all, send an error
+          if (!hasContent) {
+            controller.enqueue(
+              encoder.encode(
+                `data: ${JSON.stringify({
+                  content:
+                    "The model returned an empty response. This can happen if the model doesn't support vision or the image format isn't supported. Try a different model.",
+                })}\n\n`
+              )
+            );
           }
         } catch (error) {
           const errMsg =
@@ -101,6 +133,7 @@ export async function POST(req: NextRequest) {
             )
           );
         } finally {
+          controller.enqueue(encoder.encode("data: [DONE]\n\n"));
           controller.close();
         }
       },
@@ -109,8 +142,9 @@ export async function POST(req: NextRequest) {
     return new Response(readable, {
       headers: {
         "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache",
+        "Cache-Control": "no-cache, no-store",
         Connection: "keep-alive",
+        "X-Model": selectedModel,
       },
     });
   } catch (error) {
@@ -118,17 +152,36 @@ export async function POST(req: NextRequest) {
     const message =
       error instanceof Error ? error.message : "Unknown error occurred";
 
-    // Check for specific Ollama connection errors
+    // Connection errors
     if (
       message.includes("ECONNREFUSED") ||
-      message.includes("fetch failed")
+      message.includes("fetch failed") ||
+      message.includes("ENOTFOUND")
     ) {
       return NextResponse.json(
         {
           error:
-            "Cannot connect to Ollama. Make sure Ollama is running and accessible at the configured endpoint.",
+            "Cannot connect to Ollama. Make sure Ollama is running (`ollama serve`) and accessible at the configured endpoint.",
         },
         { status: 503 }
+      );
+    }
+
+    // Timeout errors
+    if (message.includes("timed out")) {
+      return NextResponse.json(
+        { error: message },
+        { status: 504 }
+      );
+    }
+
+    // Model not found
+    if (message.includes("model") && message.includes("not found")) {
+      return NextResponse.json(
+        {
+          error: `Model not found. Pull it first with: ollama pull ${error instanceof Error && error.message.match(/model '(.+?)'/)?.[1] || "llava:7b"}`,
+        },
+        { status: 404 }
       );
     }
 
