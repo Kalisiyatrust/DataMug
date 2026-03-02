@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getOpenAIClient } from "@/lib/ollama-client";
 import { DEFAULT_SYSTEM_PROMPT } from "@/lib/constants";
+import { checkRateLimit } from "@/lib/rate-limit";
+import { sanitizeMessage, sanitizeModelName, sanitizeHistory } from "@/lib/validation";
 
 export const runtime = "nodejs";
 export const maxDuration = 120; // 2 minutes max for vision processing
@@ -37,8 +39,26 @@ function isRetryable(error: unknown): boolean {
 
 export async function POST(req: NextRequest) {
   try {
+    // Rate limiting — 30 requests per minute per IP
+    const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+    const rateResult = checkRateLimit(ip, 30, 60_000);
+    if (!rateResult.allowed) {
+      return NextResponse.json(
+        { error: "Rate limit exceeded. Please wait before sending more requests." },
+        {
+          status: 429,
+          headers: {
+            "Retry-After": String(Math.ceil((rateResult.resetAt - Date.now()) / 1000)),
+          },
+        }
+      );
+    }
+
     const body = await req.json();
-    const { message, image, model, history } = body;
+    const message = sanitizeMessage(body.message);
+    const { image, images } = body;
+    const model = sanitizeModelName(body.model);
+    const history = sanitizeHistory(body.history);
 
     if (!message && !image) {
       return NextResponse.json(
@@ -59,6 +79,20 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Validate each image in the array
+    if (images && Array.isArray(images)) {
+      for (let i = 0; i < images.length; i++) {
+        if (images[i].length > 15_000_000) {
+          return NextResponse.json(
+            {
+              error: `Image ${i + 1} is too large. Please use images under 10MB each.`,
+            },
+            { status: 413 }
+          );
+        }
+      }
+    }
+
     const client = getOpenAIClient();
     const selectedModel = model || process.env.DEFAULT_MODEL || "llava:7b";
 
@@ -68,19 +102,30 @@ export async function POST(req: NextRequest) {
     ];
 
     // Add conversation history (last 10 messages for context)
-    if (history && Array.isArray(history)) {
+    if (history && history.length > 0) {
       const recentHistory = history.slice(-10);
       for (const msg of recentHistory) {
         if (msg.role === "user") {
-          if (msg.image) {
+          // Build the image list for this history message.
+          // Support both the legacy single-image field and the new array field.
+          const historyImages: string[] =
+            msg.images && msg.images.length > 0
+              ? msg.images
+              : msg.image
+                ? [msg.image]
+                : [];
+
+          if (historyImages.length > 0) {
+            const imageBlocks = historyImages.map((url: string) => ({
+              type: "image_url" as const,
+              image_url: { url },
+            }));
+
             messages.push({
               role: "user",
               content: [
                 { type: "text", text: msg.content },
-                {
-                  type: "image_url",
-                  image_url: { url: msg.image },
-                },
+                ...imageBlocks,
               ],
             });
           } else {
@@ -93,15 +138,25 @@ export async function POST(req: NextRequest) {
     }
 
     // Add current message
-    if (image) {
+    // Normalise: prefer `images` array; fall back to single `image` string.
+    const imageList: string[] =
+      images && images.length > 0
+        ? images
+        : image
+          ? [image]
+          : [];
+
+    if (imageList.length > 0) {
+      const imageBlocks = imageList.map((url: string) => ({
+        type: "image_url" as const,
+        image_url: { url },
+      }));
+
       messages.push({
         role: "user",
         content: [
-          { type: "text", text: message || "Describe this image." },
-          {
-            type: "image_url",
-            image_url: { url: image },
-          },
+          { type: "text", text: message || "Describe these images." },
+          ...imageBlocks,
         ],
       });
     } else {

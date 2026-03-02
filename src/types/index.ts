@@ -2,7 +2,8 @@ export interface Message {
   id: string;
   role: "user" | "assistant" | "system";
   content: string;
-  image?: string; // base64 data URL
+  image?: string;   // base64 data URL — legacy single-image field, kept for backward compat
+  images?: string[]; // base64 data URLs — multi-image support (up to 4)
   timestamp: number;
 }
 
@@ -36,7 +37,8 @@ export interface ModelCapability {
 export interface VisionRequest {
   messages: Message[];
   model?: string;
-  image?: string;
+  image?: string;    // legacy single-image — kept for backward compat
+  images?: string[]; // multi-image array; takes precedence over `image` when present
 }
 
 export interface StreamChunk {
