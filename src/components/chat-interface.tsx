@@ -15,6 +15,7 @@ import {
 } from "@/lib/threads";
 import { processImage } from "@/lib/image-utils";
 import { ImageUpload } from "./image-upload";
+import { MultiImageUpload } from "./multi-image-upload";
 import { MessageBubble } from "./message-bubble";
 import { ModelSelector } from "./model-selector";
 import { PresetButtons } from "./preset-buttons";
@@ -22,11 +23,16 @@ import { ConnectionBanner } from "./connection-banner";
 import { EmptyState } from "./empty-state";
 import { TypingIndicator } from "./typing-indicator";
 import { ThreadSidebar } from "./thread-sidebar";
+import { ThemeToggle } from "./theme-toggle";
+import { useVirtualizedMessages } from "@/hooks/use-virtualized-messages";
+import { COMPARISON_PRESETS } from "@/lib/comparison-presets";
 import {
   Send,
   ImagePlus,
   StopCircle,
   Coffee,
+  Menu,
+  Images,
 } from "lucide-react";
 
 export function ChatInterface() {
@@ -39,10 +45,12 @@ export function ChatInterface() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [image, setImage] = useState<string | null>(null);
+  const [multiImages, setMultiImages] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedModel, setSelectedModel] = useState("");
   const [models, setModels] = useState<OllamaModel[]>([]);
   const [showUpload, setShowUpload] = useState(false);
+  const [multiImageMode, setMultiImageMode] = useState(false);
   const [streamingContent, setStreamingContent] = useState("");
   const [connectionStatus, setConnectionStatus] = useState<
     "connected" | "disconnected" | "checking"
@@ -55,6 +63,10 @@ export function ChatInterface() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+
+  // Day 11: Virtualized messages for performance
+  const { visibleMessages, hasEarlier, hiddenCount, loadEarlier } =
+    useVirtualizedMessages(messages);
 
   // Initialize: load threads, migrate legacy data
   useEffect(() => {
@@ -116,9 +128,11 @@ export function ChatInterface() {
   useEffect(() => {
     const lastUserWithImage = [...messages]
       .reverse()
-      .find((m) => m.role === "user" && m.image);
+      .find((m) => m.role === "user" && (m.image || (m.images && m.images.length > 0)));
     if (lastUserWithImage?.image) {
       setLastImage(lastUserWithImage.image);
+    } else if (lastUserWithImage?.images && lastUserWithImage.images.length > 0) {
+      setLastImage(lastUserWithImage.images[0]);
     }
   }, [messages]);
 
@@ -128,6 +142,31 @@ export function ChatInterface() {
       setSidebarOpen(true);
     }
   }, [threads.length]);
+
+  // Lock body scroll when mobile sidebar is open
+  useEffect(() => {
+    if (sidebarOpen && typeof window !== "undefined" && window.innerWidth < 768) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [sidebarOpen]);
+
+  // Listen for compare event from multi-image-upload
+  useEffect(() => {
+    function handleCompare() {
+      const preset = COMPARISON_PRESETS[0];
+      if (preset) {
+        setInput(preset.prompt);
+        inputRef.current?.focus();
+      }
+    }
+    window.addEventListener("datamug:compare", handleCompare);
+    return () => window.removeEventListener("datamug:compare", handleCompare);
+  }, []);
 
   async function fetchModels() {
     setConnectionStatus("checking");
@@ -165,8 +204,10 @@ export function ChatInterface() {
     setActiveThreadId(thread.id);
     setMessages([]);
     setImage(null);
+    setMultiImages([]);
     setLastImage(null);
     setShowUpload(false);
+    setMultiImageMode(false);
     inputRef.current?.focus();
   }
 
@@ -176,6 +217,10 @@ export function ChatInterface() {
       setActiveThreadId(id);
       setMessages(thread.messages);
       if (thread.model) setSelectedModel(thread.model);
+      // Close sidebar on mobile
+      if (typeof window !== "undefined" && window.innerWidth < 768) {
+        setSidebarOpen(false);
+      }
     }
   }
 
@@ -220,7 +265,8 @@ export function ChatInterface() {
   const handleSubmit = useCallback(
     async (customPrompt?: string) => {
       const messageText = customPrompt || input.trim();
-      if (!messageText && !image) return;
+      const hasImages = multiImageMode ? multiImages.length > 0 : !!image;
+      if (!messageText && !hasImages) return;
       if (isLoading) return;
 
       // Auto-create thread if none exists
@@ -235,7 +281,8 @@ export function ChatInterface() {
         id: generateId(),
         role: "user",
         content: messageText || "Analyze this image",
-        image: image || undefined,
+        image: !multiImageMode ? (image || undefined) : undefined,
+        images: multiImageMode && multiImages.length > 0 ? multiImages : undefined,
         timestamp: Date.now(),
       };
 
@@ -247,10 +294,13 @@ export function ChatInterface() {
 
       abortControllerRef.current = new AbortController();
 
-      // Determine which image to send:
-      // - Current image if attached
-      // - Last image from conversation for follow-up questions
-      const imageToSend = image || (messageText && lastImage ? lastImage : null);
+      // Determine which image(s) to send
+      const imagesToSend = multiImageMode && multiImages.length > 0
+        ? multiImages
+        : null;
+      const singleImageToSend = !multiImageMode
+        ? (image || (messageText && lastImage ? lastImage : null))
+        : null;
 
       try {
         const res = await fetch("/api/vision", {
@@ -258,7 +308,8 @@ export function ChatInterface() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             message: messageText || "Analyze this image",
-            image: imageToSend || undefined,
+            image: singleImageToSend || undefined,
+            images: imagesToSend || undefined,
             model: selectedModel || undefined,
             history: messages.slice(-10),
           }),
@@ -354,12 +405,14 @@ export function ChatInterface() {
         setIsLoading(false);
         setStreamingContent("");
         setImage(null);
+        setMultiImages([]);
         setShowUpload(false);
+        setMultiImageMode(false);
         abortControllerRef.current = null;
         inputRef.current?.focus();
       }
     },
-    [input, image, isLoading, selectedModel, messages, streamingContent, activeThreadId, lastImage]
+    [input, image, multiImages, multiImageMode, isLoading, selectedModel, messages, streamingContent, activeThreadId, lastImage]
   );
 
   function handleStop() {
@@ -401,8 +454,12 @@ export function ChatInterface() {
           const file = item.getAsFile();
           if (file) {
             processImage(file).then((dataUrl) => {
-              setImage(dataUrl);
-              setShowUpload(false);
+              if (multiImageMode) {
+                setMultiImages((prev) => [...prev.slice(0, 3), dataUrl]);
+              } else {
+                setImage(dataUrl);
+                setShowUpload(false);
+              }
             });
           }
           break;
@@ -411,7 +468,7 @@ export function ChatInterface() {
     }
     window.addEventListener("paste", handleGlobalPaste);
     return () => window.removeEventListener("paste", handleGlobalPaste);
-  }, []);
+  }, [multiImageMode]);
 
   function handleImageSelect(dataUrl: string) {
     setImage(dataUrl);
@@ -419,11 +476,21 @@ export function ChatInterface() {
     inputRef.current?.focus();
   }
 
+  // Get active thread for title
+  const activeThread = threads.find((t) => t.id === activeThreadId);
+
   // Show follow-up context hint
-  const hasImageContext = !image && !!lastImage && messages.length > 0;
+  const hasImageContext = !image && multiImages.length === 0 && !!lastImage && messages.length > 0;
 
   return (
     <div className="flex h-full">
+      {/* Mobile sidebar overlay */}
+      <div
+        className={`sidebar-overlay md:hidden ${sidebarOpen ? "active" : ""}`}
+        onClick={() => setSidebarOpen(false)}
+        aria-hidden="true"
+      />
+
       {/* Thread Sidebar */}
       <ThreadSidebar
         threads={threads}
@@ -450,7 +517,15 @@ export function ChatInterface() {
           }}
         >
           <div className="flex items-center gap-2.5">
-            {!sidebarOpen && <div className="w-8" />}
+            {/* Hamburger — mobile only */}
+            <button
+              className="md:hidden p-2 rounded-lg"
+              style={{ color: "var(--color-text-secondary)" }}
+              onClick={() => setSidebarOpen((prev) => !prev)}
+              aria-label="Toggle sidebar"
+            >
+              <Menu size={18} />
+            </button>
             <div
               className="w-8 h-8 rounded-lg flex items-center justify-center"
               style={{ background: "var(--color-accent)" }}
@@ -478,6 +553,7 @@ export function ChatInterface() {
               onRefresh={fetchModels}
               connectionStatus={connectionStatus}
             />
+            <ThemeToggle />
           </div>
         </header>
 
@@ -499,8 +575,28 @@ export function ChatInterface() {
             />
           ) : (
             <div className="space-y-6">
-              {messages.map((msg) => (
-                <MessageBubble key={msg.id} message={msg} />
+              {/* Load earlier messages button */}
+              {hasEarlier && (
+                <button
+                  onClick={loadEarlier}
+                  className="w-full text-xs py-2 rounded-lg transition-colors duration-200 cursor-pointer"
+                  style={{
+                    background: "var(--color-surface-hover)",
+                    color: "var(--color-text-secondary)",
+                    border: "1px solid var(--color-border)",
+                  }}
+                >
+                  Load {hiddenCount} earlier messages
+                </button>
+              )}
+              {visibleMessages.map((msg) => (
+                <MessageBubble
+                  key={msg.id}
+                  message={msg}
+                  allMessages={messages}
+                  threadTitle={activeThread?.title}
+                  model={selectedModel}
+                />
               ))}
               {isLoading && streamingContent && (
                 <MessageBubble
@@ -514,7 +610,7 @@ export function ChatInterface() {
                 />
               )}
               {isLoading && !streamingContent && (
-                <TypingIndicator hasImage={!!image || !!lastImage} />
+                <TypingIndicator hasImage={!!image || multiImages.length > 0 || !!lastImage} />
               )}
             </div>
           )}
@@ -529,7 +625,8 @@ export function ChatInterface() {
             background: "var(--color-bg)",
           }}
         >
-          {(showUpload || image) && (
+          {/* Single image upload */}
+          {!multiImageMode && (showUpload || image) && (
             <ImageUpload
               image={image}
               onImageSelect={handleImageSelect}
@@ -537,12 +634,21 @@ export function ChatInterface() {
             />
           )}
 
-          {image && !isLoading && (
+          {/* Multi-image upload */}
+          {multiImageMode && (
+            <MultiImageUpload
+              images={multiImages}
+              onImagesChange={setMultiImages}
+              maxImages={4}
+            />
+          )}
+
+          {image && !multiImageMode && !isLoading && (
             <PresetButtons onSelect={handlePresetClick} />
           )}
 
           {/* Follow-up context hint */}
-          {hasImageContext && !showUpload && (
+          {hasImageContext && !showUpload && !multiImageMode && (
             <div
               className="flex items-center gap-1.5 text-xs px-2 py-1 rounded-lg animate-fadeIn"
               style={{
@@ -556,19 +662,47 @@ export function ChatInterface() {
           )}
 
           <div className="flex items-end gap-2">
+            {/* Single image button */}
             <button
-              onClick={() => setShowUpload(!showUpload)}
+              onClick={() => {
+                if (multiImageMode) {
+                  setMultiImageMode(false);
+                  setMultiImages([]);
+                }
+                setShowUpload(!showUpload);
+              }}
               className="p-2.5 rounded-xl transition-all duration-200 cursor-pointer flex-shrink-0"
               style={{
-                background: showUpload
+                background: showUpload && !multiImageMode
                   ? "var(--color-accent)"
                   : "var(--color-surface)",
-                color: showUpload ? "white" : "var(--color-text-secondary)",
-                border: `1px solid ${showUpload ? "var(--color-accent)" : "var(--color-border)"}`,
+                color: showUpload && !multiImageMode ? "white" : "var(--color-text-secondary)",
+                border: `1px solid ${showUpload && !multiImageMode ? "var(--color-accent)" : "var(--color-border)"}`,
               }}
               title="Upload image (Ctrl+Shift+V)"
             >
               <ImagePlus size={18} />
+            </button>
+
+            {/* Multi-image toggle */}
+            <button
+              onClick={() => {
+                setMultiImageMode(!multiImageMode);
+                setShowUpload(false);
+                setImage(null);
+                if (multiImageMode) setMultiImages([]);
+              }}
+              className="p-2.5 rounded-xl transition-all duration-200 cursor-pointer flex-shrink-0"
+              style={{
+                background: multiImageMode
+                  ? "var(--color-accent)"
+                  : "var(--color-surface)",
+                color: multiImageMode ? "white" : "var(--color-text-secondary)",
+                border: `1px solid ${multiImageMode ? "var(--color-accent)" : "var(--color-border)"}`,
+              }}
+              title="Multi-image compare mode"
+            >
+              <Images size={18} />
             </button>
 
             <div
@@ -584,11 +718,15 @@ export function ChatInterface() {
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder={
-                  image
-                    ? "Ask about this image..."
-                    : hasImageContext
-                      ? "Ask a follow-up about the image..."
-                      : "Upload an image and ask a question..."
+                  multiImageMode
+                    ? multiImages.length > 0
+                      ? "Ask about these images..."
+                      : "Upload images to compare..."
+                    : image
+                      ? "Ask about this image..."
+                      : hasImageContext
+                        ? "Ask a follow-up about the image..."
+                        : "Upload an image and ask a question..."
                 }
                 rows={1}
                 className="flex-1 px-4 py-2.5 bg-transparent outline-none resize-none text-sm leading-relaxed"
@@ -615,15 +753,15 @@ export function ChatInterface() {
             ) : (
               <button
                 onClick={() => handleSubmit()}
-                disabled={!input.trim() && !image}
+                disabled={!input.trim() && !image && multiImages.length === 0}
                 className="p-2.5 rounded-xl transition-all duration-200 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed flex-shrink-0"
                 style={{
                   background:
-                    input.trim() || image
+                    input.trim() || image || multiImages.length > 0
                       ? "var(--color-accent)"
                       : "var(--color-surface-hover)",
                   color:
-                    input.trim() || image
+                    input.trim() || image || multiImages.length > 0
                       ? "white"
                       : "var(--color-text-secondary)",
                 }}
