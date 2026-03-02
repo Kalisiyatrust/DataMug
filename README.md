@@ -8,6 +8,7 @@ Live at [mugdata.com](https://mugdata.com) | [GitHub](https://github.com/Kalisiy
 
 ## Features
 
+### Core
 - **Vision AI Analysis** — Upload images for OCR, object detection, document parsing, visual Q&A
 - **100% Private** — All processing happens through your local Ollama instance
 - **Multi-Image Compare** — Upload up to 4 images for side-by-side comparison
@@ -17,6 +18,17 @@ Live at [mugdata.com](https://mugdata.com) | [GitHub](https://github.com/Kalisiy
 - **Export & Share** — Copy, download as HTML/text, share analysis results
 - **Responsive** — Works on desktop, tablet, and mobile
 - **Thread Management** — Multiple conversation threads with import/export
+
+### Advanced (Week 3)
+- **Prompt Templates** — 12 built-in templates + create your own custom templates, organized by category
+- **Image Gallery** — Persistent gallery of all analyzed images with thumbnails, tags, and search
+- **Batch Analysis** — Queue multiple images for sequential analysis with the same prompt
+- **Command Palette** — `⌘K` to access any feature instantly, with keyboard shortcuts
+- **Settings Panel** — Default model, theme, context window size, auto-save preferences
+- **Analytics Dashboard** — Track analyses count, models used, response times, daily activity, streaks
+- **PWA Support** — Install as a native app on desktop/mobile, offline fallback page
+- **Error Boundary** — Graceful error handling with recovery
+- **404 Page** — Custom not-found page
 
 ## Tech Stack
 
@@ -83,6 +95,20 @@ npm run dev
 | `minicpm-v` | 5.1 GB | Efficient, good quality |
 | `moondream2` | 1.8 GB | Lightweight, fastest |
 
+## Keyboard Shortcuts
+
+| Shortcut | Action |
+|---|---|
+| `⌘K` | Command palette |
+| `⌘N` | New chat |
+| `⌘T` | Prompt templates |
+| `⌘G` | Image gallery |
+| `⌘,` | Settings |
+| `⌘⇧V` | Upload image |
+| `Enter` | Send message |
+| `Shift+Enter` | New line |
+| `Esc` | Stop generation |
+
 ## Project Structure
 
 ```
@@ -90,7 +116,9 @@ src/
 ├── app/
 │   ├── page.tsx              # Landing page
 │   ├── layout.tsx            # Root layout with SEO metadata
+│   ├── not-found.tsx         # 404 page
 │   ├── globals.css           # CSS variables, dark mode, animations
+│   ├── sitemap.ts            # Dynamic sitemap
 │   ├── chat/
 │   │   └── page.tsx          # Chat application page
 │   └── api/
@@ -98,61 +126,59 @@ src/
 │       ├── models/route.ts   # Model listing endpoint
 │       └── health/route.ts   # Health check endpoint
 ├── components/
-│   ├── chat-interface.tsx    # Main chat UI with threads, multi-image
-│   ├── message-bubble.tsx    # Message display with markdown, share menu
-│   ├── multi-image-upload.tsx # Multi-image drag & drop upload
-│   ├── share-menu.tsx        # Export/share dropdown menu
-│   ├── theme-toggle.tsx      # Dark mode toggle (light/dark/system)
-│   ├── optimized-image.tsx   # Lazy-loaded images with IntersectionObserver
-│   ├── thread-sidebar.tsx    # Thread management sidebar
-│   ├── model-selector.tsx    # Model selection dropdown
-│   └── ...                   # Other UI components
+│   ├── chat-interface.tsx    # Main chat UI (orchestrates all features)
+│   ├── message-bubble.tsx    # Message display with markdown
+│   ├── image-upload.tsx      # Single image upload with drag-drop
+│   ├── multi-image-upload.tsx # Multi-image comparison mode
+│   ├── model-selector.tsx    # Model dropdown with capabilities
+│   ├── preset-buttons.tsx    # Quick analysis preset buttons
+│   ├── thread-sidebar.tsx    # Thread list with search, import/export
+│   ├── connection-banner.tsx # Ollama connection status
+│   ├── theme-toggle.tsx      # Dark/light mode toggle
+│   ├── empty-state.tsx       # Welcome screen
+│   ├── typing-indicator.tsx  # AI thinking animation
+│   ├── share-menu.tsx        # Export/share options
+│   ├── template-library.tsx  # Prompt template browser (Week 3)
+│   ├── image-gallery.tsx     # Image gallery modal (Week 3)
+│   ├── batch-analysis.tsx    # Batch image analysis (Week 3)
+│   ├── command-palette.tsx   # ⌘K command palette (Week 3)
+│   ├── settings-panel.tsx    # App settings (Week 3)
+│   ├── analytics-dashboard.tsx # Usage analytics (Week 3)
+│   ├── error-boundary.tsx    # Error boundary (Week 3)
+│   ├── lazy-components.tsx   # Code-split dynamic imports
+│   └── optimized-image.tsx   # Lazy-loaded images
 ├── hooks/
-│   └── use-virtualized-messages.ts  # Message windowing for performance
+│   └── use-virtualized-messages.ts # Virtual scrolling
 ├── lib/
-│   ├── ollama-client.ts      # OpenAI SDK client for Ollama
-│   ├── constants.ts          # Prompts, presets, config
-│   ├── threads.ts            # Thread CRUD (localStorage)
-│   ├── image-utils.ts        # Image compression & processing
-│   ├── export-utils.ts       # Export to HTML/text/markdown
-│   ├── comparison-presets.ts # Multi-image comparison presets
-│   ├── rate-limit.ts         # Sliding window rate limiter
-│   └── validation.ts         # Input sanitization utilities
-├── types/
-│   └── index.ts              # TypeScript interfaces
-└── middleware.ts             # Security headers, CSP, blocked paths
+│   ├── constants.ts          # Presets, system prompt, model capabilities
+│   ├── threads.ts            # Thread CRUD, import/export
+│   ├── ollama-client.ts      # OpenAI SDK wrapper for Ollama
+│   ├── image-utils.ts        # Client-side image processing
+│   ├── export-utils.ts       # Export to HTML/text
+│   ├── comparison-presets.ts # Multi-image comparison prompts
+│   ├── rate-limit.ts         # IP-based rate limiting
+│   ├── validation.ts         # Input sanitization
+│   ├── prompt-templates.ts   # Template CRUD (Week 3)
+│   ├── gallery.ts            # Image gallery store (Week 3)
+│   └── analytics.ts          # Usage tracking (Week 3)
+├── middleware.ts              # Security headers, CSP, path blocking
+└── types/
+    └── index.ts              # TypeScript interfaces
+public/
+├── manifest.json             # PWA manifest (Week 3)
+├── sw.js                     # Service worker (Week 3)
+├── offline.html              # Offline fallback (Week 3)
+├── favicon.svg               # SVG favicon
+├── robots.txt                # SEO robots
+└── icons/                    # PWA icons (Week 3)
 ```
 
 ## Development Timeline
 
-### Week 1 (Foundation)
-- **Day 1**: Project scaffold, Next.js 15, Ollama streaming API
-- **Day 2**: Streaming polish, error handling, UX improvements
-- **Day 3-4**: Image handling, model selector, conversation threads
-- **Day 5-7**: Thread polish, error recovery, deployment to Vercel
-
-### Week 2 (Polish & Launch)
-- **Day 8**: Responsive design, dark mode toggle, mobile sidebar
-- **Day 9**: Multi-image upload, comparison mode, presets
-- **Day 10**: Export/share menu (clipboard, HTML, text, markdown)
-- **Day 11**: Performance (lazy loading, message virtualization, optimized images)
-- **Day 12**: Landing page with SEO/OpenGraph
-- **Day 13**: Security (rate limiting, input validation, CSP, middleware)
-- **Day 14**: Documentation, testing, launch prep
-
-## Security
-
-- **Rate Limiting**: 30 requests/minute per IP on vision API
-- **Input Validation**: Message sanitization, model name validation, history limits
-- **CSP Headers**: Restrictive Content Security Policy via middleware
-- **Security Headers**: HSTS, X-Frame-Options DENY, X-Content-Type-Options nosniff
-- **Blocked Paths**: Common attack vectors (wp-admin, .env, .git) return 404
-- **Privacy**: No telemetry, no analytics, no cookies. Images processed locally only.
+- **Week 1 (Days 1-7)**: Core chat UI, vision API, streaming, image handling, threads, presets, deployment
+- **Week 2 (Days 8-14)**: Responsive design, multi-image, export/share, optimizations, landing page, security, docs
+- **Week 3 (Days 15-21)**: Templates, gallery, batch analysis, command palette, settings, analytics, PWA, polish
 
 ## License
 
 MIT
-
----
-
-Built with Next.js, Ollama, and Cloudflare Tunnel. Deployed on Vercel.
