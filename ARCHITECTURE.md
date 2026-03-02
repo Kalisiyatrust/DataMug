@@ -1,161 +1,125 @@
-# DataMug.com — Architecture & Development Plan
+# DataMug Architecture
 
-## Vision
-DataMug is a computer vision application that lets users upload images and get AI-powered analysis using locally-hosted Ollama vision models. Inspired by Moltbot's local-first agentic architecture and Claude Cowork's conversational artifact creation, DataMug provides a clean chat-based interface for image understanding — OCR, object detection, document analysis, and visual Q&A.
+## Overview
 
----
+DataMug is a privacy-first AI vision analysis application. Users upload images through a web interface hosted on Vercel, which proxies requests through a Cloudflare Tunnel to a local Ollama instance running vision models.
 
-## High-Level Architecture
+## System Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                      USER BROWSER                       │
-│  ┌───────────────────────────────────────────────────┐  │
-│  │  Next.js Frontend (React 19 + Tailwind CSS)       │  │
-│  │  • Image Upload (drag-drop, paste, file picker)   │  │
-│  │  • Streaming Chat UI with markdown rendering      │  │
-│  │  • Model Selector (dropdown of Ollama models)     │  │
-│  │  • Analysis Presets (OCR, Describe, Detect, etc.) │  │
-│  │  • Conversation History (localStorage MVP)        │  │
-│  └───────────────────┬───────────────────────────────┘  │
-│                      │ HTTPS POST /api/vision           │
-└──────────────────────┼──────────────────────────────────┘
-                       │
-                       ▼
+│  User's Browser                                         │
+│  ┌──────────────────────────────────────────────────┐  │
+│  │  Next.js App (React, TypeScript, Tailwind)       │  │
+│  │  - Landing page (/)                              │  │
+│  │  - Chat interface (/chat)                        │  │
+│  │  - Image upload, compression, preview            │  │
+│  │  - Thread management (localStorage)              │  │
+│  │  - Markdown rendering, export                    │  │
+│  └───────────────┬──────────────────────────────────┘  │
+│                   │ HTTPS                               │
+└───────────────────┼─────────────────────────────────────┘
+                    ↓
 ┌─────────────────────────────────────────────────────────┐
-│              VERCEL (Edge/Node Runtime)                  │
-│  ┌───────────────────────────────────────────────────┐  │
-│  │  Next.js API Routes (Node runtime)                │  │
-│  │  • POST /api/vision — Image analysis endpoint     │  │
-│  │  • GET  /api/models — List available models       │  │
-│  │  • POST /api/chat   — Text-only chat fallback     │  │
-│  │                                                   │  │
-│  │  Uses OpenAI SDK with baseURL pointing to         │  │
-│  │  Ollama's OpenAI-compatible endpoint via tunnel   │  │
-│  └───────────────────┬───────────────────────────────┘  │
-│                      │ HTTPS via Cloudflare Tunnel       │
-└──────────────────────┼──────────────────────────────────┘
-                       │
-                       ▼
+│  Vercel Edge Network                                     │
+│  ┌──────────────────────────────────────────────────┐  │
+│  │  Next.js Middleware (Edge Runtime)                │  │
+│  │  - Security headers (CSP, HSTS, etc.)            │  │
+│  │  - Blocked path filtering                        │  │
+│  └───────────────┬──────────────────────────────────┘  │
+│                   ↓                                      │
+│  ┌──────────────────────────────────────────────────┐  │
+│  │  API Routes (Node.js Runtime)                     │  │
+│  │  /api/vision  — Streaming chat completion         │  │
+│  │  /api/models  — List available Ollama models      │  │
+│  │  /api/health  — Health check                      │  │
+│  │                                                    │  │
+│  │  Features:                                        │  │
+│  │  - Rate limiting (30 req/min/IP)                  │  │
+│  │  - Input validation & sanitization                │  │
+│  │  - Retry with exponential backoff                 │  │
+│  │  - Server-Sent Events streaming                   │  │
+│  │  - Multi-image support                            │  │
+│  └───────────────┬──────────────────────────────────┘  │
+│                   │ HTTPS (OpenAI-compatible API)        │
+└───────────────────┼─────────────────────────────────────┘
+                    ↓
 ┌─────────────────────────────────────────────────────────┐
-│           CLOUDFLARE TUNNEL (Encrypted)                  │
-│  ollama.mugdata.com → localhost:11434                    │
-│  • Zero-trust access (optional Cloudflare Access)       │
-│  • Free tier, stable subdomain                          │
-│  • HTTPS termination handled by Cloudflare              │
-└───────────────────────┬─────────────────────────────────┘
-                        │
-                        ▼
+│  Cloudflare Tunnel (HTTPS → HTTP bridge)                 │
+│  Endpoint: https://ollama.mugdata.com                    │
+│  Maps to: http://localhost:11434                         │
+└───────────────────┬─────────────────────────────────────┘
+                    ↓
 ┌─────────────────────────────────────────────────────────┐
-│           YOUR LOCAL MACHINE / HOME SERVER               │
-│  ┌───────────────────────────────────────────────────┐  │
-│  │  Ollama Server (localhost:11434)                   │  │
-│  │  • llava:7b          — General vision analysis    │  │
-│  │  • llama3.2-vision   — Advanced multimodal        │  │
-│  │  • qwen2.5vl:7b      — Best OCR/doc analysis     │  │
-│  │  • minicpm-v         — Lightweight alternative    │  │
-│  │                                                   │  │
-│  │  OpenAI-compatible API:                           │  │
-│  │  POST /v1/chat/completions (with images array)    │  │
-│  │  GET  /v1/models                                  │  │
-│  └───────────────────────────────────────────────────┘  │
+│  User's Local Machine                                    │
+│  ┌──────────────────────────────────────────────────┐  │
+│  │  Ollama (localhost:11434)                         │  │
+│  │  - llava:7b, llama3.2-vision, qwen2.5vl, etc.   │  │
+│  │  - GPU-accelerated inference                      │  │
+│  │  - OpenAI-compatible /v1/chat/completions API     │  │
+│  └──────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────┘
 ```
 
----
-
-## Tech Stack
-
-| Layer       | Technology                     | Why                                           |
-|-------------|--------------------------------|-----------------------------------------------|
-| Framework   | Next.js 15 (App Router)        | Full-stack React, SSR, API routes, Vercel-native |
-| Language    | TypeScript                     | Type safety, better DX                        |
-| Styling     | Tailwind CSS v4                | Utility-first, rapid UI development           |
-| AI SDK      | OpenAI JS SDK                  | OpenAI-compatible API works with Ollama       |
-| Streaming   | Web Streams API                | Real-time token-by-token response display     |
-| Upload      | react-dropzone                 | Drag-drop, paste, file picker                 |
-| Markdown    | react-markdown + remark-gfm   | Render AI responses with rich formatting      |
-| Icons       | Lucide React                   | Clean, consistent icon set                    |
-| LLM Host    | Ollama (local)                 | Free, private, runs vision models locally     |
-| Tunnel      | Cloudflare Tunnel (cloudflared)| Free HTTPS tunnel to local Ollama             |
-| Hosting     | Vercel (free/pro)              | Zero-config Next.js deployment                |
-| Storage     | localStorage (MVP)             | Chat history, no DB needed yet                |
-| VCS         | GitHub                         | Version control, Vercel auto-deploy           |
-
----
-
 ## Data Flow
 
+### Image Analysis Request
+1. User uploads image(s) → compressed client-side via canvas (max 1024px, JPEG 80%)
+2. Base64 data URL(s) + text prompt sent to `/api/vision`
+3. Middleware applies security headers
+4. Rate limiter checks IP-based request count
+5. Input validator sanitizes message, model name, history
+6. OpenAI SDK forwards to Ollama endpoint via Cloudflare Tunnel
+7. Ollama processes with selected vision model
+8. Response streams back via SSE (Server-Sent Events)
+9. Client renders markdown incrementally during streaming
+
+### Thread Persistence
+- All conversation data stored in browser localStorage
+- Thread format: `{ id, title, messages[], model, createdAt, pinned }`
+- Export/import as JSON for cross-device portability
+- No server-side storage — zero data collection
+
+## Key Design Decisions
+
+| Decision | Rationale |
+|---|---|
+| OpenAI SDK for Ollama | Ollama exposes an OpenAI-compatible API; using the official SDK gives us streaming, retries, and type safety for free |
+| Cloudflare Tunnel | Avoids exposing Ollama directly; provides HTTPS, DDoS protection, and zero-trust access |
+| Client-side image compression | Reduces upload size by 70-90% before sending to API; keeps bandwidth costs low |
+| localStorage for threads | No server-side storage needed; data stays fully on the user's device |
+| CSS variables for theming | Enables dark mode toggle without Tailwind dark: prefixes; cleaner, more maintainable |
+| Sliding window rate limiter | Simple, effective, no external dependencies; suitable for single-instance Vercel deployment |
+| Middleware for security | Edge runtime for minimal latency; CSP + HSTS + blocked paths applied globally |
+
+## Performance Optimizations
+
+- **Message virtualization**: Only renders last 30 messages; older messages lazy-loaded on demand
+- **Lazy image loading**: IntersectionObserver defers base64 decode until image enters viewport
+- **Image compression**: Client-side resize + JPEG compression before upload
+- **Security headers**: Immutable caching for static assets (1 year)
+- **Console stripping**: Production builds remove console.log statements via SWC compiler
+
+## Security Layers
+
+1. **Edge Middleware**: CSP, HSTS, Permissions-Policy, X-Frame-Options, blocked paths
+2. **API Rate Limiting**: Sliding window counter, 30 req/min/IP
+3. **Input Validation**: Message length limits, model name allowlist, history sanitization
+4. **Image Validation**: Size limits (10MB), format validation, per-image array checks
+5. **Network**: Cloudflare Tunnel provides TLS, DDoS protection, access controls
+6. **Privacy**: No cookies, no analytics, no telemetry, no server-side storage
+
+## Environment Configuration
+
+```env
+# Required
+LLM_ENDPOINT=https://ollama.mugdata.com/v1
+OPENAI_API_KEY=ollama
+DEFAULT_MODEL=llava:7b
 ```
-1. User drops image + types prompt → Client
-2. Client → base64 encodes image → POST /api/vision
-3. API route → Builds OpenAI-compatible messages with image_url
-4. API route → Calls LLM_ENDPOINT (tunnel URL) /v1/chat/completions
-5. Ollama processes image + prompt → Streams tokens back
-6. API route → Pipes stream to client via ReadableStream
-7. Client → Renders tokens in real-time (typewriter effect)
-```
 
----
+## Domain Configuration
 
-## Environment Variables
-
-| Variable        | Dev Value                        | Prod Value (Vercel)                    |
-|-----------------|----------------------------------|----------------------------------------|
-| LLM_ENDPOINT    | http://localhost:11434/v1        | https://ollama.mugdata.com/v1          |
-| OPENAI_API_KEY  | ollama                           | ollama (dummy, not checked)            |
-| MODEL           | llava:7b                         | llava:7b (or user-selectable)          |
-| NEXT_PUBLIC_APP | DataMug                          | DataMug                               |
-
----
-
-## 2-Week MVP Development Plan
-
-### Week 1: Core Engine
-
-| Day | Tasks | Deliverable | Milestone |
-|-----|-------|-------------|-----------|
-| **Day 1** | Project scaffold, deps, API route, basic UI, env config | Working local prototype | ✅ Milestone 1: "Hello Vision" — image → Ollama → response |
-| **Day 2** | Streaming UI, markdown rendering, loading states | Streaming chat experience | |
-| **Day 3** | Image handling (resize, paste, multiple formats), model selector | Polished upload UX | |
-| **Day 4** | Analysis presets (OCR, Describe, Detect Objects, Analyze Document) | Preset buttons working | ✅ Milestone 2: Core Features Complete |
-| **Day 5** | Conversation history (multi-turn), localStorage persistence | Chat threads | |
-| **Day 6** | Error handling, retry logic, timeout management | Robust error states | |
-| **Day 7** | Cloudflare Tunnel setup, Vercel deploy, end-to-end test | **MVP staging live** | ✅ Milestone 3: Deployed to Vercel + Tunnel |
-
-### Week 2: Polish & Ship
-
-| Day | Tasks | Deliverable | Milestone |
-|-----|-------|-------------|-----------|
-| **Day 8** | Responsive design (mobile/tablet), dark mode | Mobile-ready UI | |
-| **Day 9** | Multi-image support, image comparison analysis | Side-by-side analysis | ✅ Milestone 4: Multi-image Support |
-| **Day 10** | Export/share results (copy, download as PDF/text) | Export functionality | |
-| **Day 11** | Performance optimization (image compression, lazy loading) | Fast load times | |
-| **Day 12** | Landing page for mugdata.com, SEO meta tags | Public-facing landing | ✅ Milestone 5: Public Landing Page |
-| **Day 13** | Security (rate limiting, input validation, tunnel auth) | Hardened for public use | |
-| **Day 14** | Full testing, documentation, README, launch prep | **MVP Ready** | ✅ Milestone 6: MVP Launch |
-
----
-
-## Recommended Ollama Vision Models
-
-| Model | Size | Best For | Pull Command |
-|-------|------|----------|--------------|
-| llava:7b | ~4.7 GB | General vision, fast | `ollama pull llava:7b` |
-| llama3.2-vision | ~7.9 GB | Advanced reasoning | `ollama pull llama3.2-vision` |
-| qwen2.5vl:7b | ~6 GB | OCR, documents, charts | `ollama pull qwen2.5vl:7b` |
-| minicpm-v | ~5.5 GB | Lightweight, fast | `ollama pull minicpm-v` |
-
----
-
-## Cost Analysis
-
-| Item | Cost |
-|------|------|
-| Ollama (local) | Free |
-| Cloudflare Tunnel | Free |
-| Vercel (Hobby) | Free (100GB bandwidth) |
-| Vercel (Pro) | $20/mo if needed |
-| Domain (mugdata.com) | ~$12/year |
-| GitHub | Free |
-| **Total MVP Cost** | **$0 — $12/year (domain only)** |
+- **Primary**: mugdata.com (Vercel)
+- **Tunnel**: ollama.mugdata.com (Cloudflare Tunnel → localhost:11434)
+- **Vercel URL**: data-mug.vercel.app (also works)

@@ -1,207 +1,158 @@
-# DataMug — AI Vision Analysis
+# DataMug — Private AI Vision Analysis
 
-Upload images and get AI-powered analysis using locally-hosted Ollama vision models. OCR, object detection, document analysis, and visual Q&A — all running on your own hardware.
+**AI-powered image analysis using local vision models via Ollama. 100% private — your images never leave your network.**
+
+Live at [mugdata.com](https://mugdata.com) | [GitHub](https://github.com/Kalisiyatrust/DataMug)
+
+---
 
 ## Features
 
-- **Image Analysis** — Drag-drop, paste, or upload images for AI analysis
-- **Streaming Responses** — Real-time token-by-token display
-- **Multiple Models** — Support for LLaVA, Llama 3.2 Vision, Qwen 2.5 VL, MiniCPM-V
-- **Analysis Presets** — One-click OCR, Describe, Detect Objects, Analyze Document
-- **Conversation Threads** — Multi-turn conversations with context
-- **Thread Management** — Pin, search, rename, export/import conversations
-- **Multi-turn Image Context** — Ask follow-up questions about uploaded images
-- **Dark Mode** — Automatic system theme detection
-- **Private** — Your images never leave your network (processed locally via Ollama)
-- **Free** — $0 running cost (Ollama + Cloudflare Tunnel + Vercel Hobby)
+- **Vision AI Analysis** — Upload images for OCR, object detection, document parsing, visual Q&A
+- **100% Private** — All processing happens through your local Ollama instance
+- **Multi-Image Compare** — Upload up to 4 images for side-by-side comparison
+- **Conversational** — Follow-up questions with full conversation context
+- **Multiple Models** — Switch between LLaVA, Qwen2.5-VL, MiniCPM-V, and more
+- **Dark Mode** — System-aware + manual toggle
+- **Export & Share** — Copy, download as HTML/text, share analysis results
+- **Responsive** — Works on desktop, tablet, and mobile
+- **Thread Management** — Multiple conversation threads with import/export
+
+## Tech Stack
+
+- **Frontend**: Next.js 15 (App Router), TypeScript, Tailwind CSS v4
+- **AI Backend**: Ollama (local) via OpenAI-compatible API
+- **Network**: Cloudflare Tunnel for secure HTTPS exposure
+- **Hosting**: Vercel
+- **Domain**: mugdata.com
 
 ## Architecture
 
 ```
-Browser → Vercel (API Routes) → Cloudflare Tunnel (HTTPS) → Local Ollama (localhost:11434)
+Browser (mugdata.com)
+  ↓ HTTPS
+Vercel (Next.js API Routes)
+  ↓ HTTPS
+Cloudflare Tunnel
+  ↓ HTTP
+Local Ollama (localhost:11434)
 ```
 
-## Quick Start (Local Development)
+## Quick Start
 
 ### Prerequisites
 
-- **Node.js** 18+
-- **Ollama** installed and running (`ollama serve`)
-- A vision model pulled: `ollama pull llava:7b`
+1. [Ollama](https://ollama.ai) installed locally
+2. A vision model pulled: `ollama pull llava:7b`
+3. [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) (for remote access)
 
-### Install & Run
+### Local Development
 
 ```bash
+# Clone the repository
 git clone https://github.com/Kalisiyatrust/DataMug.git
 cd DataMug
+
+# Install dependencies
 npm install
-cp .env.example .env.local
-# Edit .env.local to set LLM_ENDPOINT=http://localhost:11434/v1
+
+# Set up environment variables
+cp .env.local.example .env.local
+# Edit .env.local with your Ollama tunnel URL
+
+# Start development server
 npm run dev
 ```
 
-Open http://localhost:3000 and start analyzing images.
+### Environment Variables
 
-## Vercel Deployment
-
-### 1. Connect GitHub Repo
-
-1. Go to [vercel.com](https://vercel.com) → Import Project
-2. Select `Kalisiyatrust/DataMug` repository
-3. Framework Preset: **Next.js** (auto-detected)
-
-### 2. Set Environment Variables
-
-In Vercel project settings → Environment Variables, add:
-
-| Variable | Value | Notes |
+| Variable | Description | Default |
 |---|---|---|
-| `LLM_ENDPOINT` | `https://ollama.mugdata.com/v1` | Your Cloudflare Tunnel URL |
-| `OPENAI_API_KEY` | `ollama` | Dummy key (Ollama doesn't validate) |
-| `DEFAULT_MODEL` | `llava:7b` | Default model for new users |
+| `LLM_ENDPOINT` | Ollama API endpoint URL | `https://ollama.mugdata.com/v1` |
+| `OPENAI_API_KEY` | API key for Ollama (any string) | `ollama` |
+| `DEFAULT_MODEL` | Default vision model | `llava:7b` |
 
-### 3. Custom Domain
+### Supported Vision Models
 
-Add `mugdata.com` (or your domain) in Vercel project settings → Domains.
+| Model | Size | Best For |
+|---|---|---|
+| `llava:7b` | 4.7 GB | General vision, good balance |
+| `llava:13b` | 8.0 GB | Higher accuracy, slower |
+| `llama3.2-vision` | 7.9 GB | Latest Llama vision capabilities |
+| `qwen2.5vl:7b` | 5.3 GB | Strong OCR and document analysis |
+| `minicpm-v` | 5.1 GB | Efficient, good quality |
+| `moondream2` | 1.8 GB | Lightweight, fastest |
 
-### 4. Deploy
+## Project Structure
 
-Push to `main` branch triggers automatic deployment.
-
-## Cloudflare Tunnel Setup
-
-The tunnel exposes your local Ollama server to the internet securely, so Vercel's serverless functions can reach it.
-
-### Install cloudflared
-
-```bash
-# macOS
-brew install cloudflare/cloudflare/cloudflared
-
-# Linux (Debian/Ubuntu)
-curl -L --output cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
-sudo dpkg -i cloudflared.deb
-
-# Windows
-winget install --id Cloudflare.cloudflared
+```
+src/
+├── app/
+│   ├── page.tsx              # Landing page
+│   ├── layout.tsx            # Root layout with SEO metadata
+│   ├── globals.css           # CSS variables, dark mode, animations
+│   ├── chat/
+│   │   └── page.tsx          # Chat application page
+│   └── api/
+│       ├── vision/route.ts   # Vision API with streaming, rate limiting
+│       ├── models/route.ts   # Model listing endpoint
+│       └── health/route.ts   # Health check endpoint
+├── components/
+│   ├── chat-interface.tsx    # Main chat UI with threads, multi-image
+│   ├── message-bubble.tsx    # Message display with markdown, share menu
+│   ├── multi-image-upload.tsx # Multi-image drag & drop upload
+│   ├── share-menu.tsx        # Export/share dropdown menu
+│   ├── theme-toggle.tsx      # Dark mode toggle (light/dark/system)
+│   ├── optimized-image.tsx   # Lazy-loaded images with IntersectionObserver
+│   ├── thread-sidebar.tsx    # Thread management sidebar
+│   ├── model-selector.tsx    # Model selection dropdown
+│   └── ...                   # Other UI components
+├── hooks/
+│   └── use-virtualized-messages.ts  # Message windowing for performance
+├── lib/
+│   ├── ollama-client.ts      # OpenAI SDK client for Ollama
+│   ├── constants.ts          # Prompts, presets, config
+│   ├── threads.ts            # Thread CRUD (localStorage)
+│   ├── image-utils.ts        # Image compression & processing
+│   ├── export-utils.ts       # Export to HTML/text/markdown
+│   ├── comparison-presets.ts # Multi-image comparison presets
+│   ├── rate-limit.ts         # Sliding window rate limiter
+│   └── validation.ts         # Input sanitization utilities
+├── types/
+│   └── index.ts              # TypeScript interfaces
+└── middleware.ts             # Security headers, CSP, blocked paths
 ```
 
-### Quick Tunnel (Testing)
+## Development Timeline
 
-```bash
-# Start a quick tunnel (gives a random URL)
-cloudflared tunnel --url http://localhost:11434
-```
+### Week 1 (Foundation)
+- **Day 1**: Project scaffold, Next.js 15, Ollama streaming API
+- **Day 2**: Streaming polish, error handling, UX improvements
+- **Day 3-4**: Image handling, model selector, conversation threads
+- **Day 5-7**: Thread polish, error recovery, deployment to Vercel
 
-This prints a URL like `https://random-words.trycloudflare.com`. Use this + `/v1` as your `LLM_ENDPOINT`.
+### Week 2 (Polish & Launch)
+- **Day 8**: Responsive design, dark mode toggle, mobile sidebar
+- **Day 9**: Multi-image upload, comparison mode, presets
+- **Day 10**: Export/share menu (clipboard, HTML, text, markdown)
+- **Day 11**: Performance (lazy loading, message virtualization, optimized images)
+- **Day 12**: Landing page with SEO/OpenGraph
+- **Day 13**: Security (rate limiting, input validation, CSP, middleware)
+- **Day 14**: Documentation, testing, launch prep
 
-### Named Tunnel (Production — Recommended)
+## Security
 
-```bash
-# 1. Login to Cloudflare
-cloudflared tunnel login
+- **Rate Limiting**: 30 requests/minute per IP on vision API
+- **Input Validation**: Message sanitization, model name validation, history limits
+- **CSP Headers**: Restrictive Content Security Policy via middleware
+- **Security Headers**: HSTS, X-Frame-Options DENY, X-Content-Type-Options nosniff
+- **Blocked Paths**: Common attack vectors (wp-admin, .env, .git) return 404
+- **Privacy**: No telemetry, no analytics, no cookies. Images processed locally only.
 
-# 2. Create a named tunnel
-cloudflared tunnel create ollama-tunnel
+## License
 
-# 3. Configure DNS (creates ollama.mugdata.com)
-cloudflared tunnel route dns ollama-tunnel ollama.mugdata.com
+MIT
 
-# 4. Create config file (~/.cloudflared/config.yml)
-cat > ~/.cloudflared/config.yml << 'EOF'
-tunnel: ollama-tunnel
-credentials-file: ~/.cloudflared/<TUNNEL_ID>.json
+---
 
-ingress:
-  - hostname: ollama.mugdata.com
-    service: http://localhost:11434
-    originRequest:
-      noTLSVerify: true
-  - service: http_status:404
-EOF
-
-# 5. Run the tunnel
-cloudflared tunnel run ollama-tunnel
-```
-
-### Run as System Service
-
-```bash
-# Install as a service (auto-start on boot)
-sudo cloudflared service install
-
-# Or on macOS
-sudo cloudflared service install
-launchctl start com.cloudflare.cloudflared
-```
-
-### Verify Tunnel
-
-```bash
-# Test from any machine
-curl https://ollama.mugdata.com/api/tags
-# Should return list of Ollama models
-```
-
-### Security (Optional)
-
-To restrict access to your tunnel, use [Cloudflare Access](https://developers.cloudflare.com/cloudflare-one/):
-
-1. Go to Cloudflare Zero Trust dashboard
-2. Create an Access Application for `ollama.mugdata.com`
-3. Set a service token policy
-4. Add the service token to Vercel as `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET`
-
-## Health Check
-
-DataMug provides a health endpoint:
-
-```bash
-curl https://mugdata.com/api/health
-```
-
-Returns:
-```json
-{
-  "status": "ok",
-  "app": "DataMug",
-  "version": "0.1.0",
-  "timestamp": "2026-03-02T18:00:00Z",
-  "ollama": {
-    "status": "connected",
-    "endpoint": "https://ollama.mugdata.com/v1",
-    "models": 3
-  }
-}
-```
-
-## Recommended Vision Models
-
-| Model | Size | Best For | Pull Command |
-|-------|------|----------|-------------|
-| llava:7b | ~4.7 GB | General vision, fast | `ollama pull llava:7b` |
-| llama3.2-vision | ~7.9 GB | Advanced reasoning | `ollama pull llama3.2-vision` |
-| qwen2.5vl:7b | ~6 GB | OCR, documents, charts | `ollama pull qwen2.5vl:7b` |
-| minicpm-v | ~5.5 GB | Lightweight, fast | `ollama pull minicpm-v` |
-
-## Cost
-
-| Item | Cost |
-|------|------|
-| Ollama (local) | Free |
-| Cloudflare Tunnel | Free |
-| Vercel (Hobby) | Free |
-| Domain | ~$12/year |
-| **Total** | **$0 — $12/year** |
-
-## Tech Stack
-
-- **Framework**: Next.js 15 (App Router), TypeScript
-- **Styling**: Tailwind CSS v4
-- **AI SDK**: OpenAI JS SDK → Ollama's OpenAI-compatible API
-- **Streaming**: Web Streams API (SSE)
-- **Upload**: react-dropzone
-- **Markdown**: react-markdown + remark-gfm
-- **Icons**: Lucide React
-- **Hosting**: Vercel
-- **LLM**: Ollama (local) via Cloudflare Tunnel
+Built with Next.js, Ollama, and Cloudflare Tunnel. Deployed on Vercel.
