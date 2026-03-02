@@ -79,7 +79,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (!(file instanceof File) && !(file instanceof Blob)) {
+    if (typeof file === 'string') {
       return NextResponse.json(
         { error: 'file must be a CSV file upload.' },
         { status: 400, headers: CORS_HEADERS }
