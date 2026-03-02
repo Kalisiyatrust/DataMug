@@ -275,3 +275,63 @@ body {
 .scroll-smooth {
   scroll-behavior: smooth;
 }
+
+/* ─── Manual dark mode toggle support ───────────── */
+
+.dark {
+  --color-bg: #0c0a09;
+  --color-surface: #1c1917;
+  --color-surface-hover: #292524;
+  --color-border: #44403c;
+  --color-text: #fafaf9;
+  --color-text-secondary: #a8a29e;
+  --color-accent: #3b82f6;
+  --color-accent-hover: #60a5fa;
+  --color-accent-light: #172554;
+  --color-error: #ef4444;
+  --color-success: #22c55e;
+}
+
+/* Mobile sidebar overlay */
+.sidebar-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 30;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+.sidebar-overlay.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Touch-friendly */
+@media (hover: none) {
+  .group:hover .group-hover\:opacity-100 {
+    opacity: 0;
+  }
+  .group:active .group-hover\:opacity-100 {
+    opacity: 1;
+  }
+}
+
+/* Safe area for notched devices */
+body {
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* Mobile-specific refinements */
+@media (max-width: 639px) {
+  .markdown-content pre {
+    font-size: 0.75rem;
+    padding: 0.625em 0.75em;
+  }
+  .markdown-content table {
+    font-size: 0.75rem;
+    display: block;
+    overflow-x: auto;
+  }
+}
