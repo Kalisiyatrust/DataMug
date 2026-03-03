@@ -346,3 +346,103 @@ export interface CsvContactRow {
   tags?: string;   // comma-separated string in the CSV
   notes?: string;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Multi-Channel Outreach
+// ─────────────────────────────────────────────────────────────────────────────
+// Note: Contact already has `email?: string` (see line ~53).
+// The `telegramChatId` field below is added to outreach messages only;
+// it can be stored on Contact.notes or a future Contact extension.
+
+/**
+ * Supported outreach delivery channels.
+ * - 'email'    — Brevo transactional email
+ * - 'telegram' — Telegram Bot API
+ * - 'whatsapp' — Meta WhatsApp Cloud API (separate from Twilio)
+ * - 'sms'      — Reserved for future SMS channel
+ */
+export type OutreachChannel = 'email' | 'telegram' | 'whatsapp' | 'sms';
+
+/**
+ * A single outreach message dispatched (or queued) to one contact
+ * via one channel.  One record is created per send attempt.
+ */
+export interface OutreachMessage {
+  /** UUID v4 */
+  id: string;
+  /** Which delivery channel was used */
+  channel: OutreachChannel;
+  /** FK to Contact.id */
+  contactId: string;
+  /**
+   * Destination address — interpretation varies by channel:
+   * - email    → email address
+   * - telegram → Telegram chat ID
+   * - whatsapp → E.164 phone number
+   * - sms      → E.164 phone number
+   */
+  to: string;
+  /** Email subject line (email channel only) */
+  subject?: string;
+  /** Plain-text message body */
+  body: string;
+  /** HTML body (email channel only) */
+  htmlBody?: string;
+  /** Current delivery lifecycle status */
+  status: 'queued' | 'sent' | 'delivered' | 'failed';
+  /** Provider-assigned message ID (Brevo messageId, Telegram message_id, Meta WAMID) */
+  externalId?: string;
+  /** Human-readable error description when status === 'failed' */
+  error?: string;
+  /** Which brand sent this message */
+  brand: 'kalisiya' | 'eloi' | 'datamug';
+  /** ISO 8601 timestamp of when the message was successfully sent */
+  sentAt?: string;
+  /** ISO 8601 creation timestamp */
+  createdAt: string;
+}
+
+/**
+ * A bulk outreach campaign that targets a filtered subset of contacts
+ * and sends the same message to all of them via a single channel.
+ */
+export interface OutreachCampaign {
+  /** UUID v4 */
+  id: string;
+  /** Human-readable campaign name */
+  name: string;
+  /** Delivery channel for the entire campaign */
+  channel: OutreachChannel;
+  /** Owning brand */
+  brand: 'kalisiya' | 'eloi' | 'datamug';
+  /** Email subject line (email channel only) */
+  subject?: string;
+  /** Plain-text message body */
+  body: string;
+  /** HTML body (email channel only) */
+  htmlBody?: string;
+  /** Campaign lifecycle status */
+  status: 'draft' | 'running' | 'completed' | 'failed';
+  /**
+   * Only contacts with at least one of these tags are included.
+   * Empty array = no tag filter (all contacts for the brand).
+   */
+  targetTags: string[];
+  /**
+   * Only contacts in these funnel stages are included.
+   * Empty array = all stages.
+   */
+  targetStages: string[];
+  /** Total number of contacts targeted by this campaign */
+  totalRecipients: number;
+  /** Running count of messages successfully sent */
+  sentCount: number;
+  /** Running count of messages confirmed delivered */
+  deliveredCount: number;
+  /** Running count of messages that failed to send */
+  failedCount: number;
+  /** ISO 8601 creation timestamp */
+  createdAt: string;
+  /** ISO 8601 last-updated timestamp */
+  updatedAt: string;
+}
