@@ -2,8 +2,12 @@
  * @fileoverview WhatsApp Marketing System — Brand Configuration
  *
  * Defines the three brands (Kalisiya Foundation, Eloi Consulting, DataMug)
- * with their WhatsApp numbers, service catalogs, and detailed AI system
- * prompts that drive conversational lead qualification.
+ * with service catalogs and detailed AI system prompts.
+ *
+ * ROUTING STRATEGY (v0.4.1):
+ * All brands share the same two Twilio WhatsApp numbers for load balancing.
+ * Inbound messages are routed to brands via keyword detection, not phone number.
+ * Outbound messages alternate between the two Twilio numbers for load distribution.
  *
  * @module lib/brands
  */
@@ -11,19 +15,57 @@
 import type { BrandConfig } from '@/types/whatsapp';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Brand definitions
+// Twilio WhatsApp sender numbers (shared across all brands)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Both Twilio WhatsApp numbers used for sending/receiving */
+export const TWILIO_NUMBERS = ['+15734325738', '+15558161423'] as const;
+
+/** Simple round-robin counter for load balancing outbound sends */
+let _sendCounter = 0;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Keyword routing rules
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Kalisiya Foundation — faith-based nonprofit focused on church planting,
- * community development, and impact investing.
+ * Keywords/phrases that route to each brand. Matched case-insensitively
+ * against the first inbound message in a conversation. Once a contact is
+ * assigned a brand, subsequent messages keep that brand association.
  */
+export const BRAND_KEYWORDS: Record<BrandConfig['id'], string[]> = {
+  kalisiya: [
+    'kalisiya', 'church', 'faith', 'christian', 'donate', 'donation',
+    'volunteer', 'ministry', 'prayer', 'mission', 'foundation',
+    'community development', 'impact investing', 'church planting',
+    'spiritual', 'bible', 'worship', 'pastor', 'nonprofit', 'charity',
+  ],
+  eloi: [
+    'eloi', 'engineering', 'manufacturing', 'teamcenter', 'siemens',
+    'plm', 'mes', 'cad', 'cam', 'cae', 'bom', 'nx', 'solid edge',
+    'catia', 'windchill', 'agile', 'digital twin', 'digital thread',
+    'product lifecycle', 'erp', 'sap', 'consulting', 'industrial',
+    'automotive', 'aerospace', 'factory', 'assembly',
+  ],
+  datamug: [
+    'datamug', 'data mug', 'computer vision', 'image analysis', 'ocr',
+    'object detection', 'ai', 'artificial intelligence', 'machine learning',
+    'vision model', 'llava', 'ollama', 'document', 'scanning', 'image',
+    'photo', 'visual', 'defect detection', 'quality inspection',
+    'api', 'sdk', 'local ai', 'privacy', 'open source', 'gpu',
+  ],
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Brand definitions
+// ─────────────────────────────────────────────────────────────────────────────
+
 const KALISIYA: BrandConfig = {
   id: 'kalisiya',
   name: 'Kalisiya Foundation',
   description:
     'A nonprofit organisation advancing church planting, faith-based community development, and impact investing across underserved regions.',
-  whatsappNumber: '+917794911850',
+  whatsappNumber: '+15734325738', // shared Twilio number (routing is keyword-based)
   tone: 'Warm, compassionate, faith-inspired, community-focused',
   targetAudience:
     'Donors, volunteers, church partners, faith-based investors, community leaders, and individuals seeking spiritual growth resources.',
@@ -61,16 +103,12 @@ Key facts to reference:
 If you are genuinely unsure how to help or the enquiry is complex, say: "I'd love to connect you with one of our team members who can help you better. May I ask for your preferred contact time?"`,
 };
 
-/**
- * Eloi Consulting — engineering and manufacturing software consultancy
- * specialising in Siemens PLM/MES ecosystems.
- */
 const ELOI: BrandConfig = {
   id: 'eloi',
   name: 'Eloi Consulting',
   description:
     'An engineering and manufacturing software consultancy delivering Siemens Teamcenter PLM, MES, and digital manufacturing transformation services.',
-  whatsappNumber: '+919959388009',
+  whatsappNumber: '+15558161423', // shared Twilio number (routing is keyword-based)
   tone: 'Professional, technically credible, consultative, results-oriented',
   targetAudience:
     'Engineering managers, IT directors, PLM/MES admins, manufacturing operations leads, and C-suite stakeholders at mid-to-large manufacturing and engineering firms.',
@@ -111,16 +149,12 @@ Key differentiators to highlight:
 If you cannot answer a specific technical question, say: "That's a great question — let me loop in our technical lead. Can I schedule a quick call this week?"`,
 };
 
-/**
- * DataMug — computer vision AI platform for image analysis, OCR,
- * and document intelligence, running locally with open-source models.
- */
 const DATAMUG: BrandConfig = {
   id: 'datamug',
   name: 'DataMug',
   description:
     'A computer vision AI platform that runs entirely on your hardware — image analysis, OCR, document processing, and visual inspection without sending data to the cloud.',
-  whatsappNumber: '+15734325738',
+  whatsappNumber: '+15734325738', // shared Twilio number (routing is keyword-based)
   tone: 'Innovative, technically clear, privacy-forward, pragmatic',
   targetAudience:
     'Developers, data scientists, CTOs, and operations leaders at companies dealing with visual data, document workflows, or quality inspection — particularly those with strict data-privacy or air-gapped requirements.',
@@ -157,7 +191,7 @@ Key facts:
 - DataMug is free and open-source for self-hosted usage.
 - Supports 20+ vision model families via Ollama integration.
 - Handles images up to 10MB; supports batch processing via API.
-- Available at https://datamug.ai
+- Available at https://mugdata.com
 
 If you cannot answer a specific technical question, say: "Let me get you a precise answer from our engineering team. Would a quick call or a technical doc be more helpful?"`,
 };
@@ -178,14 +212,6 @@ export const BRAND_MAP: Record<BrandConfig['id'], BrandConfig> = {
 
 /**
  * Retrieve a brand configuration by its ID.
- *
- * @param id - The brand identifier
- * @returns The BrandConfig for that brand
- * @throws If the brand ID is not found
- *
- * @example
- * const brand = getBrand('datamug');
- * console.log(brand.whatsappNumber); // '+15734325738'
  */
 export function getBrand(id: BrandConfig['id']): BrandConfig {
   const brand = BRAND_MAP[id];
@@ -196,22 +222,77 @@ export function getBrand(id: BrandConfig['id']): BrandConfig {
 }
 
 /**
- * Determine the brand that owns a given WhatsApp number.
+ * Check whether a phone number is one of our Twilio sender numbers.
  *
- * @param number - E.164 phone number (e.g. "+917794911850")
- * @returns The matching BrandConfig, or undefined if no brand matches
+ * @param number - E.164 phone number (e.g. "+15734325738")
+ * @returns true if it's a known Twilio sender
+ */
+export function isTwilioNumber(number: string): boolean {
+  const normalised = number.replace(/[\s\-()]/g, '');
+  return TWILIO_NUMBERS.some((n) => normalised.endsWith(n.slice(1)) || normalised === n);
+}
+
+/**
+ * Determine the brand that owns a given WhatsApp number.
+ * @deprecated Use detectBrandFromMessage() for keyword-based routing instead.
  */
 export function getBrandByNumber(number: string): BrandConfig | undefined {
+  // With keyword-based routing, any Twilio number maps to the default brand
+  if (isTwilioNumber(number)) {
+    return DATAMUG; // default — will be overridden by keyword detection
+  }
   return BRANDS.find((b) => b.whatsappNumber === number);
 }
 
 /**
- * Return the E.164 WhatsApp "From" address for a brand,
- * prefixed with "whatsapp:" for Twilio's API.
+ * Detect which brand a message should be routed to based on message content.
+ * Scores each brand by counting keyword matches. Falls back to DataMug
+ * (the most general brand) if no keywords match.
  *
- * @param id - The brand identifier
+ * @param messageText - The incoming WhatsApp message text
+ * @returns The best-matching BrandConfig
+ */
+export function detectBrandFromMessage(messageText: string): BrandConfig {
+  const lower = messageText.toLowerCase();
+  let bestBrand: BrandConfig['id'] = 'datamug';
+  let bestScore = 0;
+
+  for (const [brandId, keywords] of Object.entries(BRAND_KEYWORDS) as [BrandConfig['id'], string[]][]) {
+    let score = 0;
+    for (const kw of keywords) {
+      if (lower.includes(kw)) {
+        // Longer keywords are more specific, give them more weight
+        score += kw.length;
+      }
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      bestBrand = brandId;
+    }
+  }
+
+  return getBrand(bestBrand);
+}
+
+/**
+ * Get the next Twilio sender number for outbound messages.
+ * Round-robins between the two numbers for load distribution.
+ *
  * @returns Twilio-formatted sender address, e.g. "whatsapp:+15734325738"
  */
-export function getTwilioFrom(id: BrandConfig['id']): string {
-  return `whatsapp:${getBrand(id).whatsappNumber}`;
+export function getNextTwilioFrom(): string {
+  const number = TWILIO_NUMBERS[_sendCounter % TWILIO_NUMBERS.length];
+  _sendCounter++;
+  return `whatsapp:${number}`;
+}
+
+/**
+ * Return the E.164 WhatsApp "From" address for a specific brand.
+ * Uses round-robin load balancing across Twilio numbers.
+ *
+ * @param _id - The brand identifier (ignored — all brands share the same numbers)
+ * @returns Twilio-formatted sender address
+ */
+export function getTwilioFrom(_id: BrandConfig['id']): string {
+  return getNextTwilioFrom();
 }

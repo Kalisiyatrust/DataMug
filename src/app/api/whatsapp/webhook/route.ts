@@ -21,7 +21,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { validateWebhook, sendWhatsAppMessage } from '@/lib/twilio-client';
-import { getBrandByNumber } from '@/lib/brands';
+import { isTwilioNumber, detectBrandFromMessage, getBrand } from '@/lib/brands';
 import {
   getContactByPhone,
   createContact,
@@ -104,15 +104,22 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // ── 3. Determine brand from the "To" number ───────────────────────────────
-    const brand = getBrandByNumber(toPhone);
-    if (!brand) {
-      console.warn(`[webhook] Unknown brand number: ${toPhone}`);
+    // ── 3. Verify the "To" number is one of our Twilio senders ────────────────
+    if (!isTwilioNumber(toPhone)) {
+      console.warn(`[webhook] Message to unknown number: ${toPhone}`);
       return new NextResponse('<?xml version="1.0" encoding="UTF-8"?><Response></Response>', {
         status: 200,
         headers: { ...CORS_HEADERS, 'Content-Type': 'text/xml' },
       });
     }
+
+    // ── 3b. Route to brand via keyword detection ──────────────────────────────
+    // If the contact already exists, keep their existing brand assignment.
+    // Otherwise detect brand from message content (defaults to DataMug).
+    const existingContact = await getContactByPhone(fromPhone);
+    const brand = existingContact
+      ? getBrand(existingContact.brand)
+      : detectBrandFromMessage(body);
 
     // ── 4. Look up or create contact ──────────────────────────────────────────
     let contact = await getContactByPhone(fromPhone, brand.id);
